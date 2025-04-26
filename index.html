@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Crypto Tracker - Binance (Real-Time with Chart.js)</title>
+    <title>Crypto Tracker - Binance (Real-Time with TradingView Widget)</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
         body { font-family: 'Inter', sans-serif; }
@@ -16,6 +16,8 @@
         .price-down { animation: flash-red 0.7s ease-out; }
         @keyframes flash-green { 0% { background-color: rgba(16, 185, 129, 0.3); } 100% { background-color: transparent; } }
         @keyframes flash-red { 0% { background-color: rgba(220, 38, 38, 0.3); } 100% { background-color: transparent; } }
+        #tradingview-widget-container { min-height: 320px; }
+        @media (min-width: 768px) { #tradingview-widget-container { min-height: 384px; } }
     </style>
      <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -45,35 +47,34 @@
         </div>
 
         <footer class="mt-10 text-center text-gray-500 text-sm">
-            Datos proporcionados por la API pública y WebSocket de Binance.
+            Datos proporcionados por la API pública y WebSocket de Binance. Gráficos por TradingView.
             <p>Listo para desplegar en Firebase Hosting.</p>
         </footer>
     </div>
 
     <div id="chart-modal" class="modal pointer-events-none fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-60 opacity-0">
-        <div class="modal-content bg-white rounded-lg shadow-xl w-11/12 max-w-3xl p-4 md:p-6 transform scale-95">
+        <div class="modal-content bg-white rounded-lg shadow-xl w-11/12 max-w-4xl p-4 md:p-6 transform scale-95">
             <div class="flex justify-between items-center border-b border-gray-200 pb-3 mb-4">
                 <h3 id="chart-modal-title" class="text-xl font-semibold text-gray-800">Gráfico de Precios</h3>
                 <button id="close-modal-btn" class="text-gray-500 hover:text-gray-700 text-2xl">&times;</button>
             </div>
-            <div class="relative w-full h-64 md:h-96">
+            <div class="relative w-full h-80 md:h-96">
                  <div id="chart-loader" class="absolute inset-0 flex items-center justify-center bg-white bg-opacity-75 z-10">
                     <div class="loader"></div>
                  </div>
                  <div id="chart-error" class="absolute inset-0 flex items-center justify-center bg-white z-10 hidden text-red-600 p-4 text-center"></div>
-                 <canvas id="priceChartCanvas"></canvas>
+                 <div id="tradingview-widget-container" class="w-full h-full">
+                     </div>
             </div>
         </div>
     </div>
 
-    <script src="https://cdn.jsdelivr.net/npm/chart.js@^4" defer></script>
-    <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@^3" defer></script>
+    <script type="text/javascript" src="https://s3.tradingview.com/tv.js" defer></script>
 
 
     <script>
         // URLs API y WebSocket
         const tickerApiUrl = 'https://api.binance.com/api/v3/ticker/24hr';
-        const klinesApiUrl = 'https://api.binance.com/api/v3/klines';
         const websocketUrl = 'wss://stream.binance.com:9443/ws';
 
         // Símbolos
@@ -85,27 +86,28 @@
         // Elementos del DOM
         const cryptoTableContainer = document.getElementById('crypto-table-container');
         const loadingIndicator = document.getElementById('loading');
-        const errorMessage = document.getElementById('error-message'); // Div para mostrar errores
+        const errorMessage = document.getElementById('error-message');
         const chartModal = document.getElementById('chart-modal');
         const chartModalTitle = document.getElementById('chart-modal-title');
         const closeModalBtn = document.getElementById('close-modal-btn');
-        const chartCanvas = document.getElementById('priceChartCanvas');
+        const widgetContainer = document.getElementById('tradingview-widget-container');
         const chartLoader = document.getElementById('chart-loader');
         const chartError = document.getElementById('chart-error');
 
-        let chartInstance = null;
+        let currentWidget = null;
         let cryptoDataMap = new Map();
         let webSocket = null;
+        let tradingViewReady = false; // Flag para saber si TradingView está listo
 
         // --- Funciones de Formato ---
-        function formatCurrency(number) {
+        function formatCurrency(number) { /* ... */
             const num = parseFloat(number);
             if (isNaN(num)) { return '<span class="text-gray-400">N/A</span>'; }
             if (num > 1_000_000_000) { return `$${(num / 1_000_000_000).toFixed(2)}B`; }
             if (num > 1_000_000) { return `$${(num / 1_000_000).toFixed(2)}M`; }
             return num.toLocaleString('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: num > 1 ? 2 : (num > 0.0001 ? 4 : 6), maximumFractionDigits: num > 1 ? 4 : 6 });
         }
-        function formatPercentage(percent) {
+        function formatPercentage(percent) { /* ... */
              const num = parseFloat(percent);
              if (isNaN(num)) { return '<span class="text-gray-400">N/A</span>'; }
              const sign = num >= 0 ? '+' : '';
@@ -113,105 +115,121 @@
         }
 
         // --- Funciones del Modal ---
-        function openModal() {
+        function openModal() { /* ... */
              chartModal.classList.remove('opacity-0', 'pointer-events-none');
              chartModal.querySelector('.modal-content').classList.remove('scale-95');
              document.body.classList.add('modal-active');
         }
-        function closeModal() {
+        function closeModal() { /* ... */
             chartModal.classList.add('opacity-0');
             chartModal.querySelector('.modal-content').classList.add('scale-95');
             setTimeout(() => {
                 chartModal.classList.add('pointer-events-none');
                 document.body.classList.remove('modal-active');
-                if (chartInstance) {
-                    console.log("Destroying Chart.js instance on close.");
-                    chartInstance.destroy();
-                    chartInstance = null;
-                }
+                if (widgetContainer) { widgetContainer.innerHTML = ''; }
+                currentWidget = null;
                 chartLoader.style.display = 'none';
                 chartError.style.display = 'none';
                 chartError.textContent = '';
             }, 250);
         }
 
-        // --- Función del Gráfico con Chart.js ---
-        async function displayChart(symbol) {
-            // ... (código de displayChart sin cambios respecto a la versión anterior) ...
-            console.log(`Attempting to display chart for ${symbol} using Chart.js`);
-            chartModalTitle.textContent = `Gráfico de ${symbol.replace('USDT', '')}/USDT (Diario)`;
+        // --- Función para mostrar Widget de TradingView ---
+        function displayChart(symbol) {
+            console.log(`Attempting to display TradingView Widget for ${symbol}`);
+            chartModalTitle.textContent = `Gráfico de ${symbol.replace('USDT', '')}/USDT`;
             chartLoader.style.display = 'flex';
             chartError.style.display = 'none';
             chartError.textContent = '';
-            openModal();
-            await new Promise(resolve => setTimeout(resolve, 50));
+            let widgetReady = false;
+            let loadingTimeoutId = null;
+
+            // Limpiar contenedor
+            if (widgetContainer) {
+                widgetContainer.innerHTML = '';
+            } else {
+                 console.error("Widget container not found!");
+                 chartError.textContent = 'Error interno: No se encontró el contenedor del gráfico.';
+                 chartError.style.display = 'flex';
+                 openModal();
+                 return;
+            }
+
+            openModal(); // Abrir el modal
+
+            // Timeout de 30 segundos (se mantiene)
+            loadingTimeoutId = setTimeout(() => {
+                if (!widgetReady) {
+                    console.error(`TradingView Widget for ${symbol} did not load within 30 seconds.`);
+                    chartLoader.style.display = 'none';
+                    chartError.textContent = `El gráfico para ${symbol} tardó demasiado en cargar o falló. Verifica tu conexión o inténtalo más tarde.`;
+                    chartError.style.display = 'flex';
+                    if (widgetContainer) widgetContainer.innerHTML = '';
+                    currentWidget = null;
+                }
+            }, 30000);
 
             try {
-                if (chartInstance) {
-                    console.warn("Destroying previous Chart.js instance.");
-                    chartInstance.destroy();
-                    chartInstance = null;
-                }
-                if (typeof Chart === 'undefined') { throw new Error('La biblioteca de gráficos (Chart.js) no está disponible.'); }
-                if (!chartCanvas) { throw new Error('El elemento canvas para el gráfico no se encontró.'); }
+                 // Verificar TradingView (usar flag global)
+                 if (!tradingViewReady || typeof TradingView === 'undefined' || typeof TradingView.widget !== 'function') {
+                     clearTimeout(loadingTimeoutId);
+                     throw new Error('La funcionalidad de TradingView Widget no está disponible o no se ha inicializado correctamente.');
+                 }
+                 console.log("TradingView Widget function is available.");
 
-                const interval = '1d';
-                const limit = 90;
-                const apiUrl = `${klinesApiUrl}?symbol=${symbol}&interval=${interval}&limit=${limit}`;
-                const response = await fetch(apiUrl);
-                if (!response.ok) {
-                    let errorDetails = `HTTP error! status: ${response.status}`;
-                    try { const errorBody = await response.json(); errorDetails += ` - ${errorBody.msg || JSON.stringify(errorBody)}`; }
-                    catch (e) { errorDetails += ` - ${response.statusText}`; }
-                    throw new Error(errorDetails);
-                }
-                const klinesData = await response.json();
-                if (!Array.isArray(klinesData) || klinesData.length === 0) { throw new Error('No se recibieron datos para el gráfico.'); }
-                const labels = klinesData.map(kline => kline[0]);
-                const dataPoints = klinesData.map(kline => parseFloat(kline[4]));
-                if (dataPoints.some(isNaN)) { console.warn("Some data points are NaN after parsing."); }
+                 // Verificar dimensiones del contenedor
+                 if (!widgetContainer || widgetContainer.clientHeight === 0 || widgetContainer.clientWidth === 0) {
+                     clearTimeout(loadingTimeoutId);
+                     console.error('Widget container has zero dimensions just before widget creation.');
+                     // Intentar forzar un reflow puede ayudar a veces, aunque no es ideal
+                     // await new Promise(resolve => requestAnimationFrame(resolve));
+                     // if (widgetContainer.clientHeight === 0 || widgetContainer.clientWidth === 0) {
+                         throw new Error('El contenedor del gráfico no tiene dimensiones válidas.');
+                     // }
+                 }
+                 console.log(`Widget container dimensions before creation: ${widgetContainer.clientWidth}x${widgetContainer.clientHeight}`);
 
-                const ctx = chartCanvas.getContext('2d');
-                if (!ctx) { throw new Error('No se pudo obtener el contexto 2D del canvas.'); }
-
-                chartInstance = new Chart(ctx, {
-                    type: 'line',
-                    data: {
-                        labels: labels,
-                        datasets: [{
-                            label: `Precio ${symbol.replace('USDT', '')}/USDT`,
-                            data: dataPoints,
-                            borderColor: 'rgb(59, 130, 246)',
-                            backgroundColor: 'rgba(59, 130, 246, 0.1)',
-                            borderWidth: 2, pointRadius: 0, tension: 0.1
-                        }]
-                    },
-                    options: {
-                        responsive: true, maintainAspectRatio: false,
-                        scales: {
-                            x: { type: 'time', time: { unit: 'day', tooltipFormat: 'MMM d, HH:mm', displayFormats: { day: 'MMM d' } }, ticks: { source: 'auto', maxRotation: 0, autoSkip: true } },
-                            y: { beginAtZero: false, ticks: { callback: function(value) { return '$' + value.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 4}); } } }
-                        },
-                        plugins: { legend: { display: false }, tooltip: { mode: 'index', intersect: false, callbacks: { label: function(context) { let label = context.dataset.label || ''; if (label) { label += ': '; } if (context.parsed.y !== null) { label += formatCurrency(context.parsed.y); } return label; } } } },
-                        interaction: { mode: 'nearest', axis: 'x', intersect: false }
-                    }
-                });
-                chartLoader.style.display = 'none';
+                 console.log("Creating widget...");
+                 // Crear el widget (configuración simplificada)
+                 currentWidget = new TradingView.widget({
+                     "width": "100%",
+                     "height": "100%",
+                     "symbol": `BINANCE:${symbol}`,
+                     "interval": "D",
+                     "timezone": "Etc/UTC",
+                     "theme": "light",
+                     "style": "3", // Gráfico de línea
+                     "locale": "es",
+                     "enable_publishing": false,
+                     "hide_side_toolbar": true, // Ocultar herramientas de dibujo
+                     "allow_symbol_change": false,
+                     "container_id": "tradingview-widget-container",
+                      "onReady": function() {
+                         widgetReady = true;
+                         clearTimeout(loadingTimeoutId); // Cancelar timeout al cargar
+                         console.log(`TradingView Widget for ${symbol} is ready (onReady fired).`);
+                         if (chartError.style.display === 'none') {
+                             chartLoader.style.display = 'none'; // Ocultar loader
+                         } else {
+                             console.warn("onReady fired, but timeout error was already displayed.");
+                         }
+                     }
+                 });
+                 console.log("TradingView widget instance created (async loading).");
 
             } catch (error) {
-                console.error(`Error in displayChart for ${symbol}:`, error);
-                chartLoader.style.display = 'none';
-                chartError.textContent = `Error al cargar el gráfico para ${symbol}: ${error.message || 'Error desconocido'}`;
-                chartError.style.display = 'flex';
-                if (chartInstance) {
-                    try { chartInstance.destroy(); } catch (destroyError) { console.error("Error destroying chart after failure:", destroyError); }
-                    chartInstance = null;
-                }
+                 clearTimeout(loadingTimeoutId);
+                 console.error(`Error creating TradingView Widget for ${symbol}:`, error);
+                 chartLoader.style.display = 'none';
+                 chartError.textContent = `Error al crear el gráfico para ${symbol}: ${error.message || 'Error desconocido'}`;
+                 chartError.style.display = 'flex';
+                 if (widgetContainer) widgetContainer.innerHTML = '';
+                 currentWidget = null;
             }
         }
 
         // --- Funciones de Actualización de Tabla (WebSocket) ---
-        function updateTableCell(cellElement, newValue, isPriceChange = false, priceGoesUp = false) {
+        function updateTableCell(cellElement, newValue, isPriceChange = false, priceGoesUp = false) { /* ... */
              if (cellElement) {
                  cellElement.innerHTML = newValue;
                  if (isPriceChange) {
@@ -221,7 +239,7 @@
                  }
              }
         }
-        function updateChangeColor(cellElement, percentValue) {
+        function updateChangeColor(cellElement, percentValue) { /* ... */
               if (cellElement) {
                  const num = parseFloat(percentValue);
                  const changeColor = isNaN(num) || num >= 0 ? 'text-green-600' : 'text-red-600';
@@ -237,17 +255,14 @@
         }
 
         // --- Función para Conectar WebSocket ---
-        function connectWebSocket() {
+        function connectWebSocket() { /* ... */
             const streams = mainCryptos.map(s => `${s.toLowerCase()}@ticker`).join('/');
             const wsUrl = `${websocketUrl}/${streams}`;
             console.log(`Connecting to WebSocket: ${wsUrl}`);
-            if (webSocket && webSocket.readyState === WebSocket.OPEN) {
-                console.log("WebSocket already open.");
-                return;
-            }
+            if (webSocket && webSocket.readyState === WebSocket.OPEN) { return; }
             webSocket = new WebSocket(wsUrl);
-            webSocket.onopen = () => { console.log('WebSocket connection established.'); errorMessage.style.display = 'none'; /* Ocultar error si se reconecta */ };
-            webSocket.onmessage = (event) => { /* ... (sin cambios) ... */
+            webSocket.onopen = () => { console.log('WebSocket connection established.'); errorMessage.style.display = 'none'; };
+            webSocket.onmessage = (event) => {
                  try {
                     const message = JSON.parse(event.data);
                     if (message.e === '24hrTicker') {
@@ -267,46 +282,29 @@
                     }
                 } catch (parseError) { console.error("Error parsing WebSocket message:", parseError, event.data); }
             };
-            webSocket.onerror = (error) => {
-                console.error('WebSocket Error:', error);
-                // Mostrar un mensaje más genérico, la reconexión se maneja en onclose
-                errorMessage.innerHTML = `<p class="font-medium">¡Error de Conexión!</p><p>Problema con la conexión en tiempo real. Intentando reconectar...</p>`;
-                errorMessage.style.display = 'block';
-            };
-            webSocket.onclose = (event) => {
-                console.log(`WebSocket connection closed (code: ${event.code}, reason: ${event.reason}). Attempting to reconnect...`);
-                webSocket = null;
-                setTimeout(connectWebSocket, 5000 + Math.random() * 1000);
-            };
+            webSocket.onerror = (error) => { console.error('WebSocket Error:', error); errorMessage.innerHTML = `<p class="font-medium">¡Error de Conexión!</p><p>Problema con la conexión en tiempo real. Intentando reconectar...</p>`; errorMessage.style.display = 'block'; };
+            webSocket.onclose = (event) => { console.log(`WebSocket connection closed (code: ${event.code}, reason: ${event.reason}). Attempting to reconnect...`); webSocket = null; setTimeout(connectWebSocket, 5000 + Math.random() * 1000); };
         }
 
         // --- Función INICIAL para Cargar Datos y Construir Tabla ---
-        async function fetchInitialDataAndBuildTable() {
+        async function fetchInitialDataAndBuildTable() { /* ... */
               loadingIndicator.style.display = 'block';
-              errorMessage.style.display = 'none'; // Ocultar error al intentar cargar de nuevo
+              errorMessage.style.display = 'none';
              try {
                  console.log("Fetching initial data from:", tickerApiUrl);
                  const response = await fetch(tickerApiUrl);
                  console.log("Initial data response status:", response.status);
                  if (!response.ok) {
-                     // Intentar obtener más detalles del error si es posible
                      let errorText = response.statusText;
-                     try {
-                         const errorBody = await response.text(); // Leer como texto por si no es JSON
-                         console.error("Error body from API:", errorBody);
-                         errorText = `${response.status} ${response.statusText} - ${errorBody.substring(0, 100)}`; // Limitar longitud
-                     } catch(e) { /* Ignorar si no se puede leer el cuerpo */ }
+                     try { const errorBody = await response.text(); console.error("Error body from API:", errorBody); errorText = `${response.status} ${response.statusText} - ${errorBody.substring(0, 100)}`; } catch(e) { /* Ignorar */ }
                      throw new Error(`HTTP error! ${errorText}`);
                  }
                  const data = await response.json();
-                 console.log("Initial data received:", data.length, "items");
                  const filteredData = data.filter(ticker => mainCryptos.includes(ticker.symbol));
-
                  let table = cryptoTableContainer.querySelector('table');
                  if (!table) {
                      table = document.createElement('table');
                      table.className = 'min-w-full divide-y divide-gray-300';
-                     // Simplificar la estructura HTML aquí por si acaso
                      table.innerHTML = `
                         <thead class="bg-gray-100">
                             <tr>
@@ -319,69 +317,68 @@
                         <tbody class="divide-y divide-gray-200 bg-white"></tbody>`;
                      cryptoTableContainer.appendChild(table);
                  }
-
                  const tbody = table.querySelector('tbody');
                  tbody.innerHTML = '';
                  cryptoDataMap.clear();
                  filteredData.sort((a, b) => mainCryptos.indexOf(a.symbol) - mainCryptos.indexOf(b.symbol));
-
                  filteredData.forEach(crypto => {
                      const row = tbody.insertRow();
                      row.className = 'transition-colors duration-150 ease-in-out hover:bg-blue-50 cursor-pointer';
                      row.dataset.symbol = crypto.symbol;
                      row.addEventListener('click', () => { displayChart(crypto.symbol); });
-
                      const cellSymbol = row.insertCell();
                      const cellPrice = row.insertCell();
                      const cellChange = row.insertCell();
                      const cellVolume = row.insertCell();
-
                      cellPrice.className = 'whitespace-nowrap px-4 py-4 text-sm text-gray-800 crypto-price';
                      cellChange.className = 'whitespace-nowrap px-4 py-4 text-sm crypto-change';
                      cellVolume.className = 'whitespace-nowrap px-4 py-4 text-sm text-gray-600 crypto-volume';
                      cellSymbol.className = 'whitespace-nowrap px-4 py-4 text-sm';
-
                      cellSymbol.innerHTML = `<div class="font-medium text-gray-900">${crypto.symbol.replace('USDT', '')}</div><div class="text-gray-500">/ USDT</div>`;
                      cellPrice.innerHTML = formatCurrency(crypto.lastPrice);
                      cellChange.innerHTML = formatPercentage(crypto.priceChangePercent);
                      updateChangeColor(cellChange, crypto.priceChangePercent);
                      cellVolume.innerHTML = formatCurrency(crypto.quoteVolume);
-
-                     cryptoDataMap.set(crypto.symbol, {
-                         rowElement: row, priceCell: cellPrice, changeCell: cellChange, volumeCell: cellVolume,
-                         lastPrice: parseFloat(crypto.lastPrice) || 0,
-                         priceChangePercent: parseFloat(crypto.priceChangePercent) || 0
-                     });
+                     cryptoDataMap.set(crypto.symbol, { rowElement: row, priceCell: cellPrice, changeCell: cellChange, volumeCell: cellVolume, lastPrice: parseFloat(crypto.lastPrice) || 0, priceChangePercent: parseFloat(crypto.priceChangePercent) || 0 });
                  });
-
                   loadingIndicator.style.display = 'none';
-                  if (!webSocket || webSocket.readyState === WebSocket.CLOSED) {
-                     connectWebSocket();
-                  }
-
+                  if (!webSocket || webSocket.readyState === WebSocket.CLOSED) { connectWebSocket(); }
              } catch (error) {
-                 // *** CAMBIO: Mostrar error más detallado ***
-                 console.error('Error fetching initial crypto data:', error); // Loguear el error completo
+                 console.error('Error fetching initial crypto data:', error);
                  loadingIndicator.style.display = 'none';
-                 // Mostrar el mensaje de error en el div de errores
                  errorMessage.innerHTML = `<p class="font-medium">¡Error al Cargar Datos!</p><p>${error.message || 'Ocurrió un error desconocido.'}</p>`;
                  errorMessage.style.display = 'block';
              }
         }
 
-        // --- Event Listeners ---
-        document.addEventListener('DOMContentLoaded', () => {
-            console.log("DOM fully loaded and parsed.");
-            fetchInitialDataAndBuildTable(); // Carga inicial y conexión WebSocket
+        // --- Inicialización Principal ---
+        // *** CAMBIO: Esperar a window.onload ***
+        window.onload = () => {
+            console.log("Window fully loaded (including scripts like tv.js).");
+
+            // Verificar TradingView DESPUÉS de window.onload
+             if (typeof TradingView !== 'undefined' && typeof TradingView.widget === 'function') {
+                 console.log('TradingView object is available after window.onload.');
+                 tradingViewReady = true; // Marcar como listo para usar
+             } else {
+                 console.error('TradingView object is NOT available even after window.onload. Check script tag and network.');
+                 // Podrías mostrar un error persistente aquí si es crítico
+                 errorMessage.innerHTML = `<p class="font-medium">¡Error Crítico!</p><p>No se pudo cargar la biblioteca de gráficos (TradingView). Los gráficos no funcionarán.</p>`;
+                 errorMessage.style.display = 'block';
+             }
+
+            // Ejecutar la carga de datos y configuración de listeners
+            fetchInitialDataAndBuildTable();
             closeModalBtn.addEventListener('click', closeModal);
             chartModal.addEventListener('click', (event) => { if (event.target === chartModal) { closeModal(); } });
             document.addEventListener('keydown', (event) => { if (event.key === 'Escape' && !chartModal.classList.contains('pointer-events-none')) { closeModal(); } });
-        });
+        };
+
+        // Limpiar el listener de DOMContentLoaded anterior si existía
+        // (No es estrictamente necesario si se reemplaza, pero es buena práctica)
+        // document.removeEventListener('DOMContentLoaded', ...) // Si hubiéramos nombrado la función
 
     </script>
-
-</body>
-</html>
 
 </body>
 </html>
