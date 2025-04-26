@@ -1,80 +1,107 @@
 <!DOCTYPE html>
-<html lang="es">
+<html lang="es" class="">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Crypto Tracker - Binance (Real-Time with TradingView Iframe)</title>
+    <title>Crypto Tracker - Binance (Modo Oscuro)</title>
     <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+      // Aplicar modo oscuro inicial basado en localStorage o preferencia del sistema
+      if (localStorage.theme === 'dark' || (!('theme' in localStorage) && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+        document.documentElement.classList.add('dark')
+      } else {
+        document.documentElement.classList.remove('dark')
+      }
+    </script>
     <style>
         body { font-family: 'Inter', sans-serif; }
         .loader { border: 4px solid #f3f3f3; border-top: 4px solid #3b82f6; border-radius: 50%; width: 40px; height: 40px; animation: spin 1s linear infinite; margin: 20px auto; }
+        /* Loader oscuro */
+        .dark .loader { border-color: #4b5563; border-top-color: #60a5fa; }
         @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
         .modal { transition: opacity 0.25s ease; }
-        .modal-content { transition: transform 0.25s ease, width 0.3s ease, height 0.3s ease; }
+        .modal-content { transition: transform 0.25s ease, width 0.3s ease, height 0.3s ease, max-width 0.3s ease; }
         body.modal-active { overflow: hidden; }
+        /* Flash de precio oscuro */
+        .dark .price-up { animation: flash-green-dark 0.7s ease-out; }
+        .dark .price-down { animation: flash-red-dark 0.7s ease-out; }
         .price-up { animation: flash-green 0.7s ease-out; }
         .price-down { animation: flash-red 0.7s ease-out; }
-        @keyframes flash-green { 0% { background-color: rgba(16, 185, 129, 0.3); } 100% { background-color: transparent; } }
-        @keyframes flash-red { 0% { background-color: rgba(220, 38, 38, 0.3); } 100% { background-color: transparent; } }
+        @keyframes flash-green { 0% { background-color: rgba(16, 185, 129, 0.2); } 100% { background-color: transparent; } }
+        @keyframes flash-red { 0% { background-color: rgba(220, 38, 38, 0.2); } 100% { background-color: transparent; } }
+        @keyframes flash-green-dark { 0% { background-color: rgba(16, 185, 129, 0.3); } 100% { background-color: transparent; } }
+        @keyframes flash-red-dark { 0% { background-color: rgba(220, 38, 38, 0.3); } 100% { background-color: transparent; } }
+        /* Iframe */
         #tradingview-iframe-container iframe { display: block; width: 100%; height: 100%; }
         #tradingview-iframe-container { min-height: 320px; }
         @media (min-width: 768px) { #tradingview-iframe-container { min-height: 384px; } }
-        .modal.fullscreen { padding: 1rem; }
-        .modal.fullscreen .modal-content { width: 95vw; height: 90vh; max-width: none; }
-        .modal.fullscreen #tradingview-iframe-container-wrapper { height: calc(90vh - 100px); }
+        /* Modal fullscreen */
+        .modal.fullscreen .modal-content { width: 90vw; max-width: 1600px; }
+
+        /* Tarjeta de cripto */
+        .crypto-card { transition: transform 0.2s ease-in-out, box-shadow 0.2s ease-in-out; }
+        .crypto-card:hover { transform: translateY(-4px); }
+        /* Sombra hover oscura */
+        .dark .crypto-card:hover { box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.3), 0 4px 6px -2px rgba(0, 0, 0, 0.2); }
+
     </style>
      <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <script src="https://cdn.jsdelivr.net/npm/lucide-static@latest/dist/lucide.min.js"></script>
 </head>
-<body class="bg-gradient-to-br from-gray-100 to-gray-200 text-gray-900 min-h-screen">
+<body class="bg-gradient-to-br from-gray-100 to-gray-200 dark:from-gray-900 dark:to-gray-800 text-gray-900 dark:text-gray-100 min-h-screen">
 
-    <div class="container mx-auto p-4 sm:p-6 md:p-8 max-w-5xl">
-        <header class="mb-10 text-center">
-             <h1 class="text-4xl md:text-5xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-blue-600 to-indigo-700 pb-2">
-                Monitor de Criptomonedas
-            </h1>
-            <p class="text-gray-600 mt-2 text-lg">Precios en tiempo real desde Binance (USDT)</p>
+    <div class="container mx-auto p-4 sm:p-6 md:p-8 max-w-7xl">
+        <header class="mb-10 flex justify-between items-center">
+            <div class="text-center flex-grow">
+                 <h1 class="text-4xl md:text-5xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-blue-600 to-indigo-700 pb-2">
+                    Monitor de Criptomonedas
+                </h1>
+                <p class="text-gray-600 dark:text-gray-400 mt-2 text-lg">Precios en tiempo real desde Binance (USDT)</p>
+            </div>
+             <button id="theme-toggle" type="button" title="Cambiar tema" class="text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700 focus:outline-none focus:ring-4 focus:ring-gray-200 dark:focus:ring-gray-700 rounded-lg text-sm p-2.5 ml-4">
+                <svg id="theme-toggle-dark-icon" class="w-5 h-5" fill="currentColor" viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg"><path d="M17.293 13.293A8 8 0 016.707 2.707a8.001 8.001 0 1010.586 10.586z"></path></svg>
+                <svg id="theme-toggle-light-icon" class="hidden w-5 h-5" fill="currentColor" viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg"><path d="M10 2a1 1 0 011 1v1a1 1 0 11-2 0V3a1 1 0 011-1zm4 8a4 4 0 11-8 0 4 4 0 018 0zm-.464 4.95l.707.707a1 1 0 001.414-1.414l-.707-.707a1 1 0 00-1.414 1.414zm2.12-10.607a1 1 0 010 1.414l-.706.707a1 1 0 11-1.414-1.414l.707-.707a1 1 0 011.414 0zM17 11a1 1 0 100-2h-1a1 1 0 100 2h1zm-7 4a1 1 0 011 1v1a1 1 0 11-2 0v-1a1 1 0 011-1zM5.05 6.464A1 1 0 106.465 5.05l-.708-.707a1 1 0 00-1.414 1.414l.707.707zm-.464 11.486a1 1 0 011.414 0l.707-.707a1 1 0 01-1.414-1.414l-.707.707a1 1 0 010 1.414zM1 11a1 1 0 100-2H0a1 1 0 100 2h1zM4.586 15.414l.707.707a1 1 0 001.414-1.414l-.707-.707a1 1 0 00-1.414 1.414z" fill-rule="evenodd" clip-rule="evenodd"></path></svg>
+            </button>
         </header>
 
-        <div id="crypto-container" class="bg-white rounded-xl shadow-lg overflow-hidden">
+        <div id="crypto-container" class="bg-white dark:bg-gray-800/50 rounded-xl shadow-lg overflow-hidden border border-gray-200 dark:border-gray-700">
             <div class="p-5 md:p-8">
                 <div id="loading" class="text-center py-10">
                     <div class="loader"></div>
-                    <p class="text-gray-500 mt-3">Cargando datos iniciales...</p>
+                    <p class="text-gray-500 dark:text-gray-400 mt-3">Cargando datos iniciales...</p>
                 </div>
-                <div id="error-message" class="hidden text-center text-red-700 bg-red-100 p-4 rounded-lg border border-red-200">
+                <div id="error-message" class="hidden text-center text-red-700 dark:text-red-400 bg-red-100 dark:bg-red-900/30 p-4 rounded-lg border border-red-200 dark:border-red-700">
                     </div>
-                <div id="crypto-table-container" class="overflow-x-auto">
+                <div id="crypto-grid-container" class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4 md:gap-6">
                      </div>
             </div>
         </div>
 
-        <footer class="mt-10 text-center text-gray-500 text-sm">
-            Creado por Luis López
-            <p>❤️.</p>
+        <footer class="mt-10 text-center text-gray-500 dark:text-gray-400 text-sm">
+            Datos proporcionados por la API pública y WebSocket de Binance. Gráficos por TradingView.
+            <p>Listo para desplegar en Firebase Hosting.</p>
         </footer>
     </div>
 
-    <div id="chart-modal" class="modal pointer-events-none fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-60 opacity-0">
-        <div class="modal-content bg-white rounded-lg shadow-xl w-11/12 max-w-4xl p-4 md:p-6 transform scale-95 flex flex-col">
-            <div class="flex justify-between items-center border-b border-gray-200 pb-3 mb-4 flex-shrink-0">
-                <h3 id="chart-modal-title" class="text-xl font-semibold text-gray-800">Gráfico de Precios</h3>
+    <div id="chart-modal" class="modal pointer-events-none fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-60 dark:bg-opacity-80 opacity-0">
+        <div class="modal-content bg-white dark:bg-gray-900 rounded-lg shadow-xl w-11/12 p-4 md:p-6 transform scale-95 flex flex-col border border-gray-200 dark:border-gray-700">
+            <div class="flex justify-between items-center border-b border-gray-200 dark:border-gray-700 pb-3 mb-4 flex-shrink-0">
+                <h3 id="chart-modal-title" class="text-xl font-semibold text-gray-800 dark:text-gray-100">Gráfico de Precios</h3>
                 <div class="flex items-center space-x-2">
-                    <button id="fullscreen-btn" title="Pantalla completa" class="p-1 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded">
+                    <button id="fullscreen-btn" title="Expandir" class="p-1 text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700 rounded">
                         <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-maximize"><path d="M8 3H5a2 2 0 0 0-2 2v3"/><path d="M21 8V5a2 2 0 0 0-2-2h-3"/><path d="M3 16v3a2 2 0 0 0 2 2h3"/><path d="M16 21h3a2 2 0 0 0 2-2v-3"/></svg>
                     </button>
-                    <button id="close-modal-btn" title="Cerrar" class="p-1 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded text-2xl">&times;</button>
+                    <button id="close-modal-btn" title="Cerrar" class="p-1 text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700 rounded text-2xl">&times;</button>
                 </div>
             </div>
-            <div id="tradingview-iframe-container-wrapper" class="relative w-full flex-grow h-80 md:h-[450px]">
-                 <div id="chart-loader" class="absolute inset-0 flex items-center justify-center bg-white bg-opacity-75 z-10">
+            <div id="tradingview-iframe-container-wrapper" class="relative w-full flex-grow h-80 md:h-[450px] bg-white dark:bg-gray-900">
+                 <div id="chart-loader" class="absolute inset-0 flex items-center justify-center bg-white dark:bg-gray-900 bg-opacity-75 dark:bg-opacity-75 z-10">
                     <div class="loader"></div>
                  </div>
-                 <div id="chart-error" class="absolute inset-0 flex items-center justify-center bg-white z-10 hidden text-red-600 p-4 text-center"></div>
-                 <div id="tradingview-iframe-container" class="w-full h-full">
-                     </div>
+                 <div id="chart-error" class="absolute inset-0 flex items-center justify-center bg-white dark:bg-gray-900 z-10 hidden text-red-600 dark:text-red-400 p-4 text-center"></div>
+                 <div id="tradingview-iframe-container" class="w-full h-full"></div>
             </div>
         </div>
     </div>
@@ -91,7 +118,7 @@
         ];
 
         // Elementos del DOM
-        const cryptoTableContainer = document.getElementById('crypto-table-container');
+        const cryptoGridContainer = document.getElementById('crypto-grid-container');
         const loadingIndicator = document.getElementById('loading');
         const errorMessage = document.getElementById('error-message');
         const chartModal = document.getElementById('chart-modal');
@@ -101,21 +128,53 @@
         const iframeContainer = document.getElementById('tradingview-iframe-container');
         const chartLoader = document.getElementById('chart-loader');
         const chartError = document.getElementById('chart-error');
+        const themeToggleButton = document.getElementById('theme-toggle');
+        const themeToggleDarkIcon = document.getElementById('theme-toggle-dark-icon');
+        const themeToggleLightIcon = document.getElementById('theme-toggle-light-icon');
 
         let cryptoDataMap = new Map();
         let webSocket = null;
 
+        // --- Funciones de Tema ---
+        function updateThemeIcon(isDarkMode) {
+            // Asegurarse que los elementos existen antes de manipular clases
+            if (!themeToggleLightIcon || !themeToggleDarkIcon || !themeToggleButton) {
+                console.error("Theme toggle button or icons not found!");
+                return;
+            }
+            if (isDarkMode) {
+                themeToggleLightIcon.classList.remove('hidden');
+                themeToggleDarkIcon.classList.add('hidden');
+                themeToggleButton.setAttribute('title', 'Cambiar a tema claro');
+            } else {
+                themeToggleDarkIcon.classList.remove('hidden');
+                themeToggleLightIcon.classList.add('hidden');
+                 themeToggleButton.setAttribute('title', 'Cambiar a tema oscuro');
+            }
+        }
+
+        function toggleTheme() {
+            const isDarkMode = document.documentElement.classList.toggle('dark');
+            localStorage.setItem('theme', isDarkMode ? 'dark' : 'light');
+            updateThemeIcon(isDarkMode);
+            const currentSymbol = iframeContainer.querySelector('iframe')?.dataset.symbol;
+            if (currentSymbol && !chartModal.classList.contains('pointer-events-none')) {
+                 console.log("Theme changed, reloading chart for:", currentSymbol);
+                 displayChart(currentSymbol);
+            }
+        }
+
         // --- Funciones de Formato ---
         function formatCurrency(number) { /* ... */
             const num = parseFloat(number);
-            if (isNaN(num)) { return '<span class="text-gray-400">N/A</span>'; }
+            if (isNaN(num)) { return '<span class="text-gray-400 dark:text-gray-500">N/A</span>'; }
             if (num > 1_000_000_000) { return `$${(num / 1_000_000_000).toFixed(2)}B`; }
             if (num > 1_000_000) { return `$${(num / 1_000_000).toFixed(2)}M`; }
             return num.toLocaleString('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: num > 1 ? 2 : (num > 0.0001 ? 4 : 6), maximumFractionDigits: num > 1 ? 4 : 6 });
         }
         function formatPercentage(percent) { /* ... */
              const num = parseFloat(percent);
-             if (isNaN(num)) { return '<span class="text-gray-400">N/A</span>'; }
+             if (isNaN(num)) { return '<span class="text-gray-400 dark:text-gray-500">N/A</span>'; }
              const sign = num >= 0 ? '+' : '';
              return `<span class="font-semibold">${sign}${num.toFixed(2)}%</span>`;
         }
@@ -146,12 +205,14 @@
             updateFullscreenButton(isFullscreen);
         }
         function updateFullscreenButton(isFullscreen) { /* ... */
+            // Asegurarse que el botón existe
+            if (!fullscreenBtn) return;
             if (isFullscreen) {
                 fullscreenBtn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-minimize"><path d="M8 3v3a2 2 0 0 1-2 2H3"/><path d="M21 8h-3a2 2 0 0 1-2-2V3"/><path d="M3 16h3a2 2 0 0 1 2 2v3"/><path d="M16 21v-3a2 2 0 0 1 2-2h3"/></svg>`;
                 fullscreenBtn.setAttribute('title', 'Restaurar tamaño');
             } else {
                 fullscreenBtn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-maximize"><path d="M8 3H5a2 2 0 0 0-2 2v3"/><path d="M21 8V5a2 2 0 0 0-2-2h-3"/><path d="M3 16v3a2 2 0 0 0 2 2h3"/><path d="M16 21h3a2 2 0 0 0 2-2v-3"/></svg>`;
-                fullscreenBtn.setAttribute('title', 'Pantalla completa');
+                fullscreenBtn.setAttribute('title', 'Expandir');
             }
         }
 
@@ -167,7 +228,9 @@
             openModal();
             try {
                 const encodedSymbol = encodeURIComponent(`BINANCE:${symbol}`);
-                const iframeSrc = `https://s.tradingview.com/widgetembed/?frameborder=0&symbol=${encodedSymbol}&interval=D&theme=light&style=3&locale=es&hide_side_toolbar=1&autosize=1`;
+                const currentTheme = document.documentElement.classList.contains('dark') ? 'dark' : 'light';
+                console.log("Current theme for chart:", currentTheme);
+                const iframeSrc = `https://s.tradingview.com/widgetembed/?frameborder=0&symbol=${encodedSymbol}&interval=D&theme=${currentTheme}&style=3&locale=es&hide_side_toolbar=1&autosize=1`;
                 console.log("Creating iframe with src:", iframeSrc);
                 const iframe = document.createElement('iframe');
                 iframe.setAttribute('src', iframeSrc);
@@ -175,6 +238,7 @@
                 iframe.setAttribute('frameborder', '0');
                 iframe.setAttribute('allowtransparency', 'true');
                 iframe.setAttribute('scrolling', 'no');
+                iframe.dataset.symbol = symbol;
                 iframe.onload = () => {
                     console.log(`Iframe for ${symbol} loaded (structure).`);
                     setTimeout(() => { if (chartError.style.display === 'none') { chartLoader.style.display = 'none'; } }, 500);
@@ -195,28 +259,26 @@
             }
         }
 
-        // --- Funciones de Actualización de Tabla (WebSocket) ---
-        function updateTableCell(cellElement, newValue, isPriceChange = false, priceGoesUp = false) { /* ... */
-             if (cellElement) {
-                 cellElement.innerHTML = newValue;
-                 if (isPriceChange) {
-                     cellElement.classList.remove('price-up', 'price-down');
-                     void cellElement.offsetWidth;
-                     cellElement.classList.add(priceGoesUp ? 'price-up' : 'price-down');
-                 }
-             }
+        // --- Funciones de Actualización de Tarjetas (WebSocket) ---
+        function updateCardElement(element, newValue, isPriceChange = false, priceGoesUp = false) { /* ... */
+            if (element) {
+                element.innerHTML = newValue;
+                if (isPriceChange && element.classList.contains('crypto-card-price')) {
+                    element.classList.remove('price-up', 'price-down');
+                    void element.offsetWidth;
+                    element.classList.add(priceGoesUp ? 'price-up' : 'price-down');
+                }
+            }
         }
-        function updateChangeColor(cellElement, percentValue) { /* ... */
-              if (cellElement) {
+        function updateChangeColor(changeElement, percentValue) { /* ... */
+              if (changeElement) {
                  const num = parseFloat(percentValue);
-                 const changeColor = isNaN(num) || num >= 0 ? 'text-green-600' : 'text-red-600';
-                 const span = cellElement.querySelector('span');
-                 if (span) {
-                     span.classList.remove('text-green-600', 'text-red-600');
-                     if (!isNaN(num)) span.classList.add(changeColor);
-                 } else {
-                      cellElement.classList.remove('text-green-600', 'text-red-600');
-                      if (!isNaN(num)) cellElement.classList.add(changeColor);
+                 const positiveColor = 'text-green-600 dark:text-green-500';
+                 const negativeColor = 'text-red-600 dark:text-red-500';
+                 const changeColorClass = isNaN(num) || num >= 0 ? positiveColor : negativeColor;
+                 changeElement.classList.remove('text-green-600', 'dark:text-green-500', 'text-red-600', 'dark:text-red-500');
+                 if (!isNaN(num)) {
+                     changeColorClass.split(' ').forEach(cls => changeElement.classList.add(cls));
                  }
              }
         }
@@ -234,17 +296,17 @@
                     const message = JSON.parse(event.data);
                     if (message.e === '24hrTicker') {
                         const symbol = message.s;
-                        const rowData = cryptoDataMap.get(symbol);
-                        if (rowData) {
+                        const cardData = cryptoDataMap.get(symbol);
+                        if (cardData) {
                             const currentPrice = parseFloat(message.c);
-                            const oldPrice = rowData.lastPrice;
+                            const oldPrice = cardData.lastPrice;
                             const priceGoesUp = currentPrice >= oldPrice;
-                            rowData.lastPrice = currentPrice;
-                            rowData.priceChangePercent = parseFloat(message.P);
-                            updateTableCell(rowData.priceCell, formatCurrency(currentPrice), true, priceGoesUp);
-                            updateTableCell(rowData.changeCell, formatPercentage(message.P));
-                            updateChangeColor(rowData.changeCell, message.P);
-                            updateTableCell(rowData.volumeCell, formatCurrency(message.q));
+                            cardData.lastPrice = currentPrice;
+                            cardData.priceChangePercent = parseFloat(message.P);
+                            updateCardElement(cardData.priceElement, formatCurrency(currentPrice), true, priceGoesUp);
+                            updateCardElement(cardData.changeElement, formatPercentage(message.P));
+                            updateChangeColor(cardData.changeElement, message.P);
+                            updateCardElement(cardData.volumeElement, formatCurrency(message.q));
                         }
                     }
                 } catch (parseError) { console.error("Error parsing WebSocket message:", parseError, event.data); }
@@ -253,106 +315,59 @@
             webSocket.onclose = (event) => { console.log(`WebSocket connection closed (code: ${event.code}, reason: ${event.reason}). Attempting to reconnect...`); webSocket = null; setTimeout(connectWebSocket, 5000 + Math.random() * 1000); };
         }
 
-        // --- Función INICIAL para Cargar Datos y Construir Tabla ---
-        async function fetchInitialDataAndBuildTable() {
+        // --- Función INICIAL para Cargar Datos y Construir Cuadrícula ---
+        async function fetchInitialDataAndBuildGrid() { /* ... (sin cambios) ... */
               loadingIndicator.style.display = 'block';
               errorMessage.style.display = 'none';
              try {
                  console.log("Fetching initial data from:", tickerApiUrl);
                  const response = await fetch(tickerApiUrl);
-                 console.log("Initial data response status:", response.status, response.statusText); // Log status text
+                 console.log("Initial data response status:", response.status, response.statusText);
                  if (!response.ok) {
                      let errorText = `${response.status} ${response.statusText}`;
-                     try {
-                         // Intenta leer el cuerpo como texto para obtener más detalles
-                         const errorBody = await response.text();
-                         console.error("Error body from API (if any):", errorBody);
-                         // Añade parte del cuerpo al mensaje si no está vacío
-                         if (errorBody) {
-                            errorText += ` - ${errorBody.substring(0, 150)}`; // Limitar longitud
-                         }
-                     } catch(e) {
-                         console.warn("Could not read error response body.");
-                     }
-                     // Crear un error con el texto detallado
+                     try { const errorBody = await response.text(); console.error("Error body from API (if any):", errorBody); if (errorBody) { errorText += ` - ${errorBody.substring(0, 150)}`; } } catch(e) { console.warn("Could not read error response body."); }
                      throw new Error(`HTTP error! ${errorText}`);
                  }
                  const data = await response.json();
-                 console.log("Initial data received, processing...");
                  const filteredData = data.filter(ticker => mainCryptos.includes(ticker.symbol));
-
-                 // --- Construcción de la tabla (sin cambios) ---
-                 let table = cryptoTableContainer.querySelector('table');
-                 if (!table) {
-                     table = document.createElement('table');
-                     table.className = 'min-w-full divide-y divide-gray-300';
-                     table.innerHTML = `
-                        <thead class="bg-gray-100">
-                            <tr>
-                                <th class="px-4 py-3.5 text-left text-sm font-semibold text-gray-900">Símbolo</th>
-                                <th class="px-4 py-3.5 text-left text-sm font-semibold text-gray-900">Precio</th>
-                                <th class="px-4 py-3.5 text-left text-sm font-semibold text-gray-900">Cambio (24h)</th>
-                                <th class="px-4 py-3.5 text-left text-sm font-semibold text-gray-900">Volumen (24h)</th>
-                            </tr>
-                        </thead>
-                        <tbody class="divide-y divide-gray-200 bg-white"></tbody>`;
-                     cryptoTableContainer.appendChild(table);
-                 }
-                 const tbody = table.querySelector('tbody');
-                 tbody.innerHTML = '';
+                 cryptoGridContainer.innerHTML = '';
                  cryptoDataMap.clear();
                  filteredData.sort((a, b) => mainCryptos.indexOf(a.symbol) - mainCryptos.indexOf(b.symbol));
                  filteredData.forEach(crypto => {
-                     const row = tbody.insertRow();
-                     row.className = 'transition-colors duration-150 ease-in-out hover:bg-blue-50 cursor-pointer';
-                     row.dataset.symbol = crypto.symbol;
-                     row.addEventListener('click', () => { displayChart(crypto.symbol); });
-                     const cellSymbol = row.insertCell();
-                     const cellPrice = row.insertCell();
-                     const cellChange = row.insertCell();
-                     const cellVolume = row.insertCell();
-                     cellPrice.className = 'whitespace-nowrap px-4 py-4 text-sm text-gray-800 crypto-price';
-                     cellChange.className = 'whitespace-nowrap px-4 py-4 text-sm crypto-change';
-                     cellVolume.className = 'whitespace-nowrap px-4 py-4 text-sm text-gray-600 crypto-volume';
-                     cellSymbol.className = 'whitespace-nowrap px-4 py-4 text-sm';
-                     cellSymbol.innerHTML = `<div class="font-medium text-gray-900">${crypto.symbol.replace('USDT', '')}</div><div class="text-gray-500">/ USDT</div>`;
-                     cellPrice.innerHTML = formatCurrency(crypto.lastPrice);
-                     cellChange.innerHTML = formatPercentage(crypto.priceChangePercent);
-                     updateChangeColor(cellChange, crypto.priceChangePercent);
-                     cellVolume.innerHTML = formatCurrency(crypto.quoteVolume);
-                     cryptoDataMap.set(crypto.symbol, { rowElement: row, priceCell: cellPrice, changeCell: cellChange, volumeCell: cellVolume, lastPrice: parseFloat(crypto.lastPrice) || 0, priceChangePercent: parseFloat(crypto.priceChangePercent) || 0 });
+                     const card = document.createElement('div');
+                     card.className = 'crypto-card bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-4 shadow-sm hover:shadow-md dark:hover:bg-gray-700 cursor-pointer flex flex-col space-y-2';
+                     card.dataset.symbol = crypto.symbol;
+                     card.addEventListener('click', () => { displayChart(crypto.symbol); });
+                     const symbolElement = document.createElement('div');
+                     symbolElement.className = 'text-lg font-semibold text-gray-800 dark:text-gray-100';
+                     symbolElement.textContent = crypto.symbol.replace('USDT', '');
+                     const priceElement = document.createElement('div');
+                     priceElement.className = 'text-xl font-bold text-gray-900 dark:text-white crypto-card-price';
+                     priceElement.innerHTML = formatCurrency(crypto.lastPrice);
+                     const changeElement = document.createElement('div');
+                     changeElement.className = 'text-sm crypto-card-change';
+                     changeElement.innerHTML = formatPercentage(crypto.priceChangePercent);
+                     updateChangeColor(changeElement, crypto.priceChangePercent);
+                     const volumeElement = document.createElement('div');
+                     volumeElement.className = 'text-xs text-gray-500 dark:text-gray-400 crypto-card-volume';
+                     volumeElement.innerHTML = `Vol (24h): ${formatCurrency(crypto.quoteVolume)}`;
+                     card.appendChild(symbolElement);
+                     card.appendChild(priceElement);
+                     card.appendChild(changeElement);
+                     card.appendChild(volumeElement);
+                     cryptoGridContainer.appendChild(card);
+                     cryptoDataMap.set(crypto.symbol, { cardElement: card, priceElement: priceElement, changeElement: changeElement, volumeElement: volumeElement, lastPrice: parseFloat(crypto.lastPrice) || 0, priceChangePercent: parseFloat(crypto.priceChangePercent) || 0 });
                  });
-                 // --- Fin construcción tabla ---
-
                   loadingIndicator.style.display = 'none';
                   if (!webSocket || webSocket.readyState === WebSocket.CLOSED) { connectWebSocket(); }
-
-             } catch (error) {
-                 // *** CAMBIO: Logging y mensaje de error mejorados ***
-                 console.error('fetchInitialDataAndBuildTable caught an error:');
-                 // Loguear diferentes representaciones del error
-                 console.log("Raw error object:", error);
-                 console.dir(error);
-                 if (error instanceof Error) {
-                     console.error("Error Name:", error.name);
-                     console.error("Error Message:", error.message);
-                     console.error("Error Stack:", error.stack);
-                 } else {
-                     console.error("Caught item is not an Error instance:", typeof error);
-                 }
-                 try {
-                     const errorString = JSON.stringify(error);
-                     console.error("Stringified error:", errorString);
-                 } catch (e) {
-                      console.warn("Could not stringify the error object.");
-                 }
-
+             } catch (error) { /* ... (manejo de error sin cambios) ... */
+                 console.error('fetchInitialDataAndBuildGrid caught an error:');
+                 console.log("Raw error object:", error); console.dir(error);
+                 if (error instanceof Error) { console.error("Error Name:", error.name); console.error("Error Message:", error.message); console.error("Error Stack:", error.stack); }
+                 else { console.error("Caught item is not an Error instance:", typeof error); }
+                 try { const errorString = JSON.stringify(error); console.error("Stringified error:", errorString); } catch (e) { console.warn("Could not stringify the error object."); }
                  loadingIndicator.style.display = 'none';
-                 // Mensaje más genérico pero que guía al usuario
-                 errorMessage.innerHTML = `<p class="font-medium">¡Error al Cargar Datos Iniciales!</p>
-                                          <p>No se pudo obtener la información de la API.</p>
-                                          <p class="text-xs mt-1">Posibles causas: Problema de red, API de Binance no disponible o bloqueo (CORS).</p>
-                                          <p class="text-xs mt-1">Revisa la consola del navegador (F12) y la pestaña 'Network' para más detalles técnicos.</p>`;
+                 errorMessage.innerHTML = `<p class="font-medium">¡Error al Cargar Datos Iniciales!</p><p>No se pudo obtener la información de la API.</p><p class="text-xs mt-1">Posibles causas: Problema de red, API de Binance no disponible o bloqueo (CORS).</p><p class="text-xs mt-1">Revisa la consola del navegador (F12) y la pestaña 'Network' para más detalles técnicos.</p>`;
                  errorMessage.style.display = 'block';
              }
         }
@@ -360,14 +375,41 @@
         // --- Inicialización Principal ---
         document.addEventListener('DOMContentLoaded', () => {
             console.log("DOM fully loaded and parsed.");
-            fetchInitialDataAndBuildTable();
-            fullscreenBtn.addEventListener('click', toggleFullscreen);
-            closeModalBtn.addEventListener('click', closeModal);
-            chartModal.addEventListener('click', (event) => { if (event.target === chartModal) { closeModal(); } });
-            document.addEventListener('keydown', (event) => { if (event.key === 'Escape' && !chartModal.classList.contains('pointer-events-none')) { closeModal(); } });
+
+            // Asegurarse que los elementos del botón de tema existen antes de usarlos
+            if (themeToggleButton && themeToggleDarkIcon && themeToggleLightIcon) {
+                // Configuración inicial del icono del tema
+                updateThemeIcon(document.documentElement.classList.contains('dark'));
+                // Listener para el botón de tema
+                themeToggleButton.addEventListener('click', toggleTheme);
+            } else {
+                console.error("Theme toggle button or icons not found on DOMContentLoaded!");
+            }
+
+            // Carga de datos y otros listeners
+            fetchInitialDataAndBuildGrid();
+            // Asegurarse que los botones del modal existen
+            if (fullscreenBtn) fullscreenBtn.addEventListener('click', toggleFullscreen); else console.error("Fullscreen button not found!");
+            if (closeModalBtn) closeModalBtn.addEventListener('click', closeModal); else console.error("Close modal button not found!");
+            if (chartModal) {
+                chartModal.addEventListener('click', (event) => { if (event.target === chartModal) { closeModal(); } });
+                document.addEventListener('keydown', (event) => { if (event.key === 'Escape' && !chartModal.classList.contains('pointer-events-none')) { closeModal(); } });
+            } else {
+                console.error("Chart modal element not found!");
+            }
         });
 
     </script>
 
 </body>
 </html>
+```
+
+**Cambios Realizados:**
+
+1.  **HTML del Botón:** Se eliminó la clase `hidden` del SVG `#theme-toggle-dark-icon` (luna). Se mantuvo la clase `hidden` en `#theme-toggle-light-icon` (sol).
+2.  **JavaScript (Inicialización):** La llamada a `updateThemeIcon(document.documentElement.classList.contains('dark'));` dentro de `DOMContentLoaded` se asegura de que el icono correcto se muestre al cargar la página, sobrescribiendo el estado inicial del HTML si es necesario (por ejemplo, si el usuario tenía el tema oscuro guardado). Se añadieron verificaciones para asegurar que los elementos del botón existen antes de añadir el listener.
+
+Con este cambio, el icono de luna debería ser visible por defecto si el tema es claro, y el icono de sol si el tema es oscuro. Al hacer clic, el icono debería cambiar correctamente y el tema aplicarse.
+
+Prueba esta versión y verifica si el botón de modo oscuro funciona como esper
