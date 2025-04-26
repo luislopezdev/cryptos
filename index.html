@@ -3,9 +3,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Crypto Tracker - Binance</title>
+    <title>Crypto Tracker - Binance (Real-Time)</title>
     <script src="https://cdn.tailwindcss.com"></script>
-    <script src="https://unpkg.com/lightweight-charts/dist/lightweight-charts.standalone.production.js"></script>
     <style>
         /* Estilo para la fuente Inter */
         body {
@@ -36,6 +35,21 @@
         body.modal-active {
             overflow: hidden;
         }
+        /* Estilo para resaltar actualización de precio */
+        .price-up {
+            animation: flash-green 0.7s ease-out;
+        }
+        .price-down {
+            animation: flash-red 0.7s ease-out;
+        }
+        @keyframes flash-green {
+            0% { background-color: rgba(16, 185, 129, 0.3); } /* green-500 con opacidad */
+            100% { background-color: transparent; }
+        }
+        @keyframes flash-red {
+            0% { background-color: rgba(220, 38, 38, 0.3); } /* red-600 con opacidad */
+            100% { background-color: transparent; }
+        }
     </style>
      <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -55,11 +69,11 @@
             <div class="p-5 md:p-8">
                 <div id="loading" class="text-center py-10">
                     <div class="loader"></div>
-                    <p class="text-gray-500 mt-3">Cargando datos...</p>
+                    <p class="text-gray-500 mt-3">Cargando datos iniciales...</p>
                 </div>
                 <div id="error-message" class="hidden text-center text-red-700 bg-red-100 p-4 rounded-lg border border-red-200">
                     <p class="font-medium">¡Error!</p>
-                    <p>No se pudieron cargar los datos. Por favor, inténtalo de nuevo más tarde.</p>
+                    <p>No se pudieron cargar los datos iniciales. Por favor, inténtalo de nuevo más tarde.</p>
                 </div>
                 <div id="crypto-table-container" class="overflow-x-auto">
                      </div>
@@ -67,7 +81,7 @@
         </div>
 
         <footer class="mt-10 text-center text-gray-500 text-sm">
-            Datos proporcionados por la API pública de Binance.
+            Datos proporcionados por la API pública y WebSocket de Binance.
             <p>Listo para desplegar en Firebase Hosting.</p>
         </footer>
     </div>
@@ -82,18 +96,20 @@
                 <div id="chart-loader" class="absolute inset-0 flex items-center justify-center bg-white bg-opacity-75 z-10">
                     <div class="loader"></div>
                  </div>
-                 <div id="chart-error" class="absolute inset-0 flex items-center justify-center bg-white z-10 hidden text-red-600 p-4 text-center">
-                     </div>
-                </div>
+                 <div id="chart-error" class="absolute inset-0 flex items-center justify-center bg-white z-10 hidden text-red-600 p-4 text-center"></div>
+            </div>
         </div>
     </div>
 
+    <script src="https://unpkg.com/lightweight-charts/dist/lightweight-charts.standalone.production.js" defer></script>
 
     <script>
-        // URL de la API de Binance para tickers y klines (candlesticks)
+        // URLs API y WebSocket
         const tickerApiUrl = 'https://api.binance.com/api/v3/ticker/24hr';
         const klinesApiUrl = 'https://api.binance.com/api/v3/klines';
-        // Lista de símbolos principales
+        const websocketUrl = 'wss://stream.binance.com:9443/ws'; // URL base de WebSocket
+
+        // Símbolos a mostrar y suscribir
         const mainCryptos = [
             'BTCUSDT', 'ETHUSDT', 'BNBUSDT', 'SOLUSDT', 'XRPUSDT', 'ADAUSDT',
             'DOGEUSDT', 'AVAXUSDT', 'DOTUSDT', 'MATICUSDT', 'LINKUSDT', 'SHIBUSDT'
@@ -110,7 +126,9 @@
         const chartLoader = document.getElementById('chart-loader');
         const chartError = document.getElementById('chart-error');
 
-        let chart = null; // Variable para mantener la instancia del gráfico
+        let chart = null; // Instancia del gráfico
+        let cryptoDataMap = new Map(); // Para mapear símbolo a datos y elementos de fila
+        let webSocket = null; // Instancia del WebSocket
 
         // --- Funciones de Formato ---
         function formatCurrency(number) {
@@ -127,9 +145,9 @@
         function formatPercentage(percent) {
              const num = parseFloat(percent);
              if (isNaN(num)) { return '<span class="text-gray-400">N/A</span>'; }
-             const changeColor = num >= 0 ? 'text-green-600' : 'text-red-600';
              const sign = num >= 0 ? '+' : '';
-             return `<span class="font-semibold ${changeColor}">${sign}${num.toFixed(2)}%</span>`;
+             // Devolver solo el span, la clase de color se aplica en updateChangeColor
+             return `<span class="font-semibold">${sign}${num.toFixed(2)}%</span>`;
         }
 
         // --- Funciones del Modal ---
@@ -138,7 +156,6 @@
             chartModal.querySelector('.modal-content').classList.remove('scale-95');
             document.body.classList.add('modal-active');
         }
-
         function closeModal() {
             chartModal.classList.add('opacity-0');
             chartModal.querySelector('.modal-content').classList.add('scale-95');
@@ -158,103 +175,95 @@
 
         // --- Funciones del Gráfico ---
         async function displayChart(symbol) {
+            console.log(`Attempting to display chart for ${symbol}`);
             chartModalTitle.textContent = `Gráfico de ${symbol.replace('USDT', '')}/USDT (Diario)`;
             chartLoader.style.display = 'flex';
             chartError.style.display = 'none';
             chartError.textContent = '';
             openModal();
-            await new Promise(resolve => setTimeout(resolve, 50)); // Esperar a que el modal sea visible
+            // Pequeña pausa para asegurar que el modal esté visible en el DOM
+            await new Promise(resolve => setTimeout(resolve, 50));
 
             try {
+                // Limpiar gráfico anterior si existe
                 if (chart) {
-                    console.warn("Removing lingering chart instance before creating new one.");
+                    console.warn("Removing previous chart instance.");
                     chart.remove();
                     chart = null;
                 }
 
-                // *** NUEVA VERIFICACIÓN: Asegurarse de que LightweightCharts esté cargado ***
-                if (typeof LightweightCharts === 'undefined') {
-                    console.error('LightweightCharts library is not loaded.');
-                    throw new Error('La biblioteca de gráficos (LightweightCharts) no se ha cargado.');
+                // Verificar disponibilidad de la biblioteca AHORA
+                if (typeof LightweightCharts === 'undefined' || typeof LightweightCharts.createChart !== 'function') {
+                    console.error('LightweightCharts library or createChart function is STILL not available when needed.');
+                    throw new Error('La biblioteca de gráficos (LightweightCharts) o su función createChart no están disponibles al intentar crear el gráfico.');
                 }
-                 if (typeof LightweightCharts.createChart !== 'function') {
-                     console.error('LightweightCharts.createChart is not a function. Library might be corrupted or loaded incorrectly.');
-                     throw new Error('La función para crear gráficos (createChart) no está disponible.');
-                 }
-                 console.log('LightweightCharts library and createChart function seem available.');
+                console.log('LightweightCharts check passed.');
 
-                // Validar contenedor del gráfico
+                // Validar contenedor
                 if (!chartContainer || chartContainer.clientHeight === 0 || chartContainer.clientWidth === 0) {
                     console.error('Chart container is not valid or has zero dimensions.');
                     throw new Error('El contenedor del gráfico no es válido o no está visible.');
                 }
+                console.log(`Chart container dimensions: ${chartContainer.clientWidth}x${chartContainer.clientHeight}`);
 
-                // 1. Obtener datos históricos (sin cambios aquí)
+                // 1. Obtener datos históricos
                 const interval = '1d';
                 const limit = 90;
                 const apiUrl = `${klinesApiUrl}?symbol=${symbol}&interval=${interval}&limit=${limit}`;
+                console.log(`Fetching klines from: ${apiUrl}`);
                 const response = await fetch(apiUrl);
-                if (!response.ok) { /* ... manejo de error de fetch ... */
+                if (!response.ok) {
                     let errorDetails = `HTTP error! status: ${response.status}`;
-                    try {
-                        const errorBody = await response.json();
-                        errorDetails += ` - ${errorBody.msg || JSON.stringify(errorBody)}`;
-                    } catch (e) { errorDetails += ` - ${response.statusText}`; }
+                    try { const errorBody = await response.json(); errorDetails += ` - ${errorBody.msg || JSON.stringify(errorBody)}`; }
+                    catch (e) { errorDetails += ` - ${response.statusText}`; }
                     console.error(`Error fetching klines for ${symbol}: ${errorDetails}`);
                     throw new Error(errorDetails);
                 }
                 const klinesData = await response.json();
+                console.log(`Received ${klinesData.length} klines for ${symbol}`);
 
-                // 2. Procesar datos (sin cambios aquí)
-                if (!Array.isArray(klinesData) || klinesData.length === 0) { throw new Error('No se recibieron datos para el gráfico o el formato es inválido.'); }
-                const chartData = klinesData.map(kline => { /* ... */
-                    if (!Array.isArray(kline) || kline.length < 5) { console.warn(`Invalid kline data skipped for ${symbol}:`, kline); return null; }
-                    return { time: kline[0] / 1000, value: parseFloat(kline[4]) };
-                }).filter(item => item !== null && !isNaN(item.value));
-                if (chartData.length === 0) { throw new Error('No hay puntos de datos válidos para el gráfico después del procesamiento.'); }
-
+                // 2. Procesar datos
+                if (!Array.isArray(klinesData) || klinesData.length === 0) { throw new Error('No se recibieron datos para el gráfico.'); }
+                const chartData = klinesData.map(kline => ({ time: kline[0] / 1000, value: parseFloat(kline[4]) }))
+                                          .filter(item => !isNaN(item.value));
+                if (chartData.length === 0) { throw new Error('No hay puntos de datos válidos para el gráfico.'); }
+                console.log(`Processed ${chartData.length} valid data points for chart.`);
 
                 // 3. Crear instancia del gráfico
-                console.log("Attempting to create chart instance for:", symbol);
-                try {
-                    // *** ENVOLVER LA CREACIÓN EN SU PROPIO TRY...CATCH ***
-                    chart = LightweightCharts.createChart(chartContainer, {
-                        width: chartContainer.clientWidth,
-                        height: chartContainer.clientHeight,
-                        layout: { background: { color: '#ffffff' }, textColor: '#333' },
-                        grid: { vertLines: { color: '#f0f0f0' }, horzLines: { color: '#f0f0f0' } },
-                        timeScale: { timeVisible: true, secondsVisible: false },
-                        rightPriceScale: { scaleMargins: { top: 0.1, bottom: 0.1 } },
-                    });
-                    console.log("Chart instance created:", chart);
-                } catch (creationError) {
-                    console.error("Error during LightweightCharts.createChart:", creationError);
-                    throw new Error(`Falló la creación del gráfico: ${creationError.message}`);
-                }
+                console.log("Attempting to create chart instance...");
+                chart = LightweightCharts.createChart(chartContainer, {
+                     width: chartContainer.clientWidth, height: chartContainer.clientHeight,
+                     layout: { background: { color: '#ffffff' }, textColor: '#333' },
+                     grid: { vertLines: { color: '#f0f0f0' }, horzLines: { color: '#f0f0f0' } },
+                     timeScale: { timeVisible: true, secondsVisible: false },
+                     rightPriceScale: { scaleMargins: { top: 0.1, bottom: 0.1 } },
+                });
+                console.log("Chart instance allegedly created:", chart); // Loguear la instancia
 
-
-                // Verificar que el gráfico se creó correctamente Y TIENE EL MÉTODO
+                 // Verificar si addLineSeries existe INMEDIATAMENTE DESPUÉS
                  if (!chart || typeof chart.addLineSeries !== 'function') {
-                    console.error('Chart object is invalid or addLineSeries method is missing AFTER creation attempt.');
-                    // Limpiar instancia si es inválida
-                    if(chart && typeof chart.remove === 'function') chart.remove();
-                    chart = null;
-                    throw new Error('El objeto del gráfico es inválido o falta el método addLineSeries después de intentar crearlo.');
-                }
+                     console.error('CRITICAL: chart.addLineSeries is missing IMMEDIATELY after creation!', chart);
+                     if(chart && typeof chart.remove === 'function') chart.remove();
+                     chart = null;
+                     throw new Error('El objeto del gráfico es inválido o falta el método addLineSeries inmediatamente después de crearlo.');
+                 }
+                 console.log("chart.addLineSeries method confirmed.");
 
-                // Añadir la serie de línea
+                // Añadir la serie de datos
                 const lineSeries = chart.addLineSeries({ color: '#3b82f6', lineWidth: 2 });
                 lineSeries.setData(chartData);
                 chart.timeScale().fitContent();
-                chartLoader.style.display = 'none';
+                console.log(`Chart for ${symbol} displayed successfully.`);
+                chartLoader.style.display = 'none'; // Ocultar loader al final
 
             } catch (error) {
-                console.error(`Error displaying chart for ${symbol}:`, error.message || error);
+                console.error(`Error in displayChart for ${symbol}:`, error); // Loguear el error completo
                 chartLoader.style.display = 'none';
                 chartError.textContent = `Error al cargar el gráfico para ${symbol}: ${error.message || 'Error desconocido'}`;
                 chartError.style.display = 'flex';
-                if (chart) { // Limpiar si hubo error después de crear
-                    chart.remove();
+                // Asegurarse de limpiar la variable chart si la creación o algo posterior falló
+                if (chart) {
+                    try { chart.remove(); } catch (removeError) { console.error("Error removing chart after failure:", removeError); }
                     chart = null;
                 }
             }
@@ -263,30 +272,102 @@
          // Redimensionar gráfico
         window.addEventListener('resize', () => {
             if (chart && !chartModal.classList.contains('pointer-events-none')) {
-                setTimeout(() => {
-                     if (chart) {
-                         chart.resize(chartContainer.clientWidth, chartContainer.clientHeight);
-                    }
-                }, 100);
+                setTimeout(() => { if (chart) { chart.resize(chartContainer.clientWidth, chartContainer.clientHeight); } }, 100);
             }
         });
 
-
-        // --- Función Principal para Cargar Datos de la Tabla ---
-        async function fetchCryptoData() {
-            // ... (resto de la función sin cambios) ...
-             if (!cryptoTableContainer.querySelector('table')) {
-                loadingIndicator.style.display = 'block';
+        // --- Funciones de Actualización de Tabla (WebSocket) ---
+        function updateTableCell(cellElement, newValue, isPriceChange = false, priceGoesUp = false) {
+            if (cellElement) {
+                cellElement.innerHTML = newValue;
+                if (isPriceChange) {
+                    cellElement.classList.remove('price-up', 'price-down');
+                    void cellElement.offsetWidth;
+                    cellElement.classList.add(priceGoesUp ? 'price-up' : 'price-down');
+                }
             }
-            errorMessage.style.display = 'none';
+        }
+        function updateChangeColor(cellElement, percentValue) {
+             if (cellElement) {
+                const num = parseFloat(percentValue);
+                const changeColor = isNaN(num) || num >= 0 ? 'text-green-600' : 'text-red-600';
+                cellElement.classList.remove('text-green-600', 'text-red-600');
+                if (!isNaN(num)) {
+                    // Asegurarse de que el span interno exista antes de añadir la clase
+                    const span = cellElement.querySelector('span');
+                    if (span) {
+                        span.classList.remove('text-green-600', 'text-red-600'); // Limpiar span también
+                        span.classList.add(changeColor);
+                    } else {
+                         // Si no hay span (poco probable con el formato actual), aplicar a la celda
+                         cellElement.classList.add(changeColor);
+                    }
+                }
+            }
+        }
+
+        // --- Función para Conectar WebSocket ---
+        function connectWebSocket() {
+            const streams = mainCryptos.map(s => `${s.toLowerCase()}@ticker`).join('/');
+            const wsUrl = `${websocketUrl}/${streams}`;
+            console.log(`Connecting to WebSocket: ${wsUrl}`);
+
+            webSocket = new WebSocket(wsUrl);
+
+            webSocket.onopen = () => { console.log('WebSocket connection established.'); };
+
+            webSocket.onmessage = (event) => {
+                try { // Añadir try-catch alrededor del procesamiento del mensaje
+                    const message = JSON.parse(event.data);
+                    if (message.e === '24hrTicker') {
+                        const symbol = message.s;
+                        const rowData = cryptoDataMap.get(symbol);
+
+                        if (rowData) {
+                            const currentPrice = parseFloat(message.c);
+                            const oldPrice = rowData.lastPrice;
+                            const priceGoesUp = currentPrice >= oldPrice;
+
+                            // Actualizar mapa y tabla
+                            rowData.lastPrice = currentPrice;
+                            rowData.priceChangePercent = parseFloat(message.P);
+
+                            updateTableCell(rowData.priceCell, formatCurrency(currentPrice), true, priceGoesUp);
+                            updateTableCell(rowData.changeCell, formatPercentage(message.P));
+                            updateChangeColor(rowData.changeCell, message.P);
+                            updateTableCell(rowData.volumeCell, formatCurrency(message.q));
+                        }
+                    }
+                } catch (parseError) {
+                    console.error("Error parsing WebSocket message:", parseError, event.data);
+                }
+            };
+
+            webSocket.onerror = (error) => {
+                console.error('WebSocket Error:', error);
+                errorMessage.textContent = 'Error de conexión en tiempo real. Intentando reconectar...';
+                errorMessage.style.display = 'block';
+                // La reconexión se maneja en onclose
+            };
+
+            webSocket.onclose = (event) => {
+                console.log(`WebSocket connection closed (code: ${event.code}, reason: ${event.reason}). Attempting to reconnect...`);
+                webSocket = null; // Limpiar la instancia
+                // Evitar reconexiones infinitas si hay un problema persistente
+                setTimeout(connectWebSocket, 5000 + Math.random() * 1000); // Añadir jitter
+            };
+        }
+
+        // --- Función INICIAL para Cargar Datos y Construir Tabla ---
+        async function fetchInitialDataAndBuildTable() {
+             loadingIndicator.style.display = 'block';
+             errorMessage.style.display = 'none';
 
             try {
                 const response = await fetch(tickerApiUrl);
                 if (!response.ok) { throw new Error(`HTTP error! status: ${response.status}`); }
                 const data = await response.json();
                 const filteredData = data.filter(ticker => mainCryptos.includes(ticker.symbol));
-
-                loadingIndicator.style.display = 'none';
 
                 let table = cryptoTableContainer.querySelector('table');
                 if (!table) {
@@ -296,8 +377,8 @@
                         <thead class="bg-gray-100">
                             <tr>
                                 <th scope="col" class="px-4 py-3.5 text-left text-sm font-semibold text-gray-900">Símbolo</th>
-                                <th scope="col" class="px-4 py-3.5 text-left text-sm font-semibold text-gray-900">Precio Actual</th>
-                                <th scope="col" class="px-4 py-3.5 text-left text-sm font-semibold text-gray-900">Cambio (24h)</th>
+                                <th scope="col" class="w-1/4 px-4 py-3.5 text-left text-sm font-semibold text-gray-900">Precio Actual</th>
+                                <th scope="col" class="w-1/4 px-4 py-3.5 text-left text-sm font-semibold text-gray-900">Cambio (24h)</th>
                                 <th scope="col" class="px-4 py-3.5 text-left text-sm font-semibold text-gray-900">Volumen (24h)</th>
                             </tr>
                         </thead>
@@ -307,7 +388,8 @@
                 }
 
                 const tbody = table.querySelector('tbody');
-                tbody.innerHTML = ''; // Limpiar tabla
+                tbody.innerHTML = '';
+                cryptoDataMap.clear();
 
                 filteredData.sort((a, b) => mainCryptos.indexOf(a.symbol) - mainCryptos.indexOf(b.symbol));
 
@@ -315,45 +397,60 @@
                     const row = tbody.insertRow();
                     row.className = 'transition-colors duration-150 ease-in-out hover:bg-blue-50 cursor-pointer';
                     row.dataset.symbol = crypto.symbol;
-
-                    row.addEventListener('click', () => {
-                        displayChart(crypto.symbol);
-                    });
+                    row.addEventListener('click', () => { displayChart(crypto.symbol); });
 
                     const cellSymbol = row.insertCell();
-                    cellSymbol.className = 'whitespace-nowrap px-4 py-4 text-sm';
-                    cellSymbol.innerHTML = `<div class="font-medium text-gray-900">${crypto.symbol.replace('USDT', '')}</div><div class="text-gray-500">/ USDT</div>`;
                     const cellPrice = row.insertCell();
-                    cellPrice.className = 'whitespace-nowrap px-4 py-4 text-sm text-gray-800';
-                    cellPrice.innerHTML = formatCurrency(crypto.lastPrice);
                     const cellChange = row.insertCell();
-                    cellChange.className = 'whitespace-nowrap px-4 py-4 text-sm';
-                    cellChange.innerHTML = formatPercentage(crypto.priceChangePercent);
                     const cellVolume = row.insertCell();
-                    cellVolume.className = 'whitespace-nowrap px-4 py-4 text-sm text-gray-600';
+
+                    cellPrice.className = 'whitespace-nowrap px-4 py-4 text-sm text-gray-800 crypto-price';
+                    cellChange.className = 'whitespace-nowrap px-4 py-4 text-sm crypto-change'; // Clase base
+                    cellVolume.className = 'whitespace-nowrap px-4 py-4 text-sm text-gray-600 crypto-volume';
+                    cellSymbol.className = 'whitespace-nowrap px-4 py-4 text-sm';
+
+                    cellSymbol.innerHTML = `<div class="font-medium text-gray-900">${crypto.symbol.replace('USDT', '')}</div><div class="text-gray-500">/ USDT</div>`;
+                    cellPrice.innerHTML = formatCurrency(crypto.lastPrice);
+                    cellChange.innerHTML = formatPercentage(crypto.priceChangePercent); // Poner el span interno
+                    updateChangeColor(cellChange, crypto.priceChangePercent); // Aplicar color al span
                     cellVolume.innerHTML = formatCurrency(crypto.quoteVolume);
+
+                    cryptoDataMap.set(crypto.symbol, {
+                        rowElement: row, priceCell: cellPrice, changeCell: cellChange, volumeCell: cellVolume,
+                        lastPrice: parseFloat(crypto.lastPrice) || 0,
+                        priceChangePercent: parseFloat(crypto.priceChangePercent) || 0
+                    });
                 });
 
+                 loadingIndicator.style.display = 'none';
+                 // Solo conectar WebSocket si no hay ya una conexión activa
+                 if (!webSocket || webSocket.readyState === WebSocket.CLOSED) {
+                    connectWebSocket();
+                 }
+
             } catch (error) {
-                console.error('Error fetching crypto data:', error);
-                if (!cryptoTableContainer.querySelector('table')) {
-                    loadingIndicator.style.display = 'none';
-                    errorMessage.style.display = 'block';
-                }
+                console.error('Error fetching initial crypto data:', error);
+                loadingIndicator.style.display = 'none';
+                errorMessage.textContent = `Error al cargar datos iniciales: ${error.message}. Inténtalo de nuevo más tarde.`;
+                errorMessage.style.display = 'block';
             }
         }
 
         // --- Event Listeners ---
-        document.addEventListener('DOMContentLoaded', fetchCryptoData);
-        setInterval(fetchCryptoData, 60000);
-        closeModalBtn.addEventListener('click', closeModal);
-        chartModal.addEventListener('click', (event) => {
-            if (event.target === chartModal) { closeModal(); }
-        });
-         document.addEventListener('keydown', (event) => {
-            if (event.key === 'Escape' && !chartModal.classList.contains('pointer-events-none')) {
-                closeModal();
-            }
+        document.addEventListener('DOMContentLoaded', () => {
+            console.log("DOM fully loaded and parsed");
+            // Verificar disponibilidad inicial de la biblioteca (opcional pero útil para depurar)
+             if (typeof LightweightCharts === 'undefined') {
+                 console.warn('LightweightCharts not immediately available after DOMContentLoaded.');
+             } else {
+                 console.log('LightweightCharts appears available after DOMContentLoaded.');
+             }
+            fetchInitialDataAndBuildTable(); // Carga inicial y conexión WebSocket
+
+            // Listeners del modal
+            closeModalBtn.addEventListener('click', closeModal);
+            chartModal.addEventListener('click', (event) => { if (event.target === chartModal) { closeModal(); } });
+            document.addEventListener('keydown', (event) => { if (event.key === 'Escape' && !chartModal.classList.contains('pointer-events-none')) { closeModal(); } });
         });
 
     </script>
