@@ -403,13 +403,3 @@
 
 </body>
 </html>
-```
-
-**Cambios Realizados:**
-
-1.  **HTML del Botón:** Se eliminó la clase `hidden` del SVG `#theme-toggle-dark-icon` (luna). Se mantuvo la clase `hidden` en `#theme-toggle-light-icon` (sol).
-2.  **JavaScript (Inicialización):** La llamada a `updateThemeIcon(document.documentElement.classList.contains('dark'));` dentro de `DOMContentLoaded` se asegura de que el icono correcto se muestre al cargar la página, sobrescribiendo el estado inicial del HTML si es necesario (por ejemplo, si el usuario tenía el tema oscuro guardado). Se añadieron verificaciones para asegurar que los elementos del botón existen antes de añadir el listener.
-
-Con este cambio, el icono de luna debería ser visible por defecto si el tema es claro, y el icono de sol si el tema es oscuro. Al hacer clic, el icono debería cambiar correctamente y el tema aplicarse.
-
-Prueba esta versión y verifica si el botón de modo oscuro funciona como esper
