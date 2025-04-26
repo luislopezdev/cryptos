@@ -3,25 +3,30 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Crypto Tracker - Binance (Real-Time with TradingView Widget)</title>
+    <title>Crypto Tracker - Binance (Real-Time with TradingView Iframe)</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
         body { font-family: 'Inter', sans-serif; }
         .loader { border: 4px solid #f3f3f3; border-top: 4px solid #3b82f6; border-radius: 50%; width: 40px; height: 40px; animation: spin 1s linear infinite; margin: 20px auto; }
         @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
         .modal { transition: opacity 0.25s ease; }
-        .modal-content { transition: transform 0.25s ease; }
+        .modal-content { transition: transform 0.25s ease, width 0.3s ease, height 0.3s ease; }
         body.modal-active { overflow: hidden; }
         .price-up { animation: flash-green 0.7s ease-out; }
         .price-down { animation: flash-red 0.7s ease-out; }
         @keyframes flash-green { 0% { background-color: rgba(16, 185, 129, 0.3); } 100% { background-color: transparent; } }
         @keyframes flash-red { 0% { background-color: rgba(220, 38, 38, 0.3); } 100% { background-color: transparent; } }
-        #tradingview-widget-container { min-height: 320px; }
-        @media (min-width: 768px) { #tradingview-widget-container { min-height: 384px; } }
+        #tradingview-iframe-container iframe { display: block; width: 100%; height: 100%; }
+        #tradingview-iframe-container { min-height: 320px; }
+        @media (min-width: 768px) { #tradingview-iframe-container { min-height: 384px; } }
+        .modal.fullscreen { padding: 1rem; }
+        .modal.fullscreen .modal-content { width: 95vw; height: 90vh; max-width: none; }
+        .modal.fullscreen #tradingview-iframe-container-wrapper { height: calc(90vh - 100px); }
     </style>
      <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/lucide-static@latest/dist/lucide.min.js"></script>
 </head>
 <body class="bg-gradient-to-br from-gray-100 to-gray-200 text-gray-900 min-h-screen">
 
@@ -53,24 +58,26 @@
     </div>
 
     <div id="chart-modal" class="modal pointer-events-none fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-60 opacity-0">
-        <div class="modal-content bg-white rounded-lg shadow-xl w-11/12 max-w-4xl p-4 md:p-6 transform scale-95">
-            <div class="flex justify-between items-center border-b border-gray-200 pb-3 mb-4">
+        <div class="modal-content bg-white rounded-lg shadow-xl w-11/12 max-w-4xl p-4 md:p-6 transform scale-95 flex flex-col">
+            <div class="flex justify-between items-center border-b border-gray-200 pb-3 mb-4 flex-shrink-0">
                 <h3 id="chart-modal-title" class="text-xl font-semibold text-gray-800">Gráfico de Precios</h3>
-                <button id="close-modal-btn" class="text-gray-500 hover:text-gray-700 text-2xl">&times;</button>
+                <div class="flex items-center space-x-2">
+                    <button id="fullscreen-btn" title="Pantalla completa" class="p-1 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-maximize"><path d="M8 3H5a2 2 0 0 0-2 2v3"/><path d="M21 8V5a2 2 0 0 0-2-2h-3"/><path d="M3 16v3a2 2 0 0 0 2 2h3"/><path d="M16 21h3a2 2 0 0 0 2-2v-3"/></svg>
+                    </button>
+                    <button id="close-modal-btn" title="Cerrar" class="p-1 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded text-2xl">&times;</button>
+                </div>
             </div>
-            <div class="relative w-full h-80 md:h-96">
+            <div id="tradingview-iframe-container-wrapper" class="relative w-full flex-grow h-80 md:h-[450px]">
                  <div id="chart-loader" class="absolute inset-0 flex items-center justify-center bg-white bg-opacity-75 z-10">
                     <div class="loader"></div>
                  </div>
                  <div id="chart-error" class="absolute inset-0 flex items-center justify-center bg-white z-10 hidden text-red-600 p-4 text-center"></div>
-                 <div id="tradingview-widget-container" class="w-full h-full">
+                 <div id="tradingview-iframe-container" class="w-full h-full">
                      </div>
             </div>
         </div>
     </div>
-
-    <script type="text/javascript" src="https://s3.tradingview.com/tv.js" defer></script>
-
 
     <script>
         // URLs API y WebSocket
@@ -90,14 +97,13 @@
         const chartModal = document.getElementById('chart-modal');
         const chartModalTitle = document.getElementById('chart-modal-title');
         const closeModalBtn = document.getElementById('close-modal-btn');
-        const widgetContainer = document.getElementById('tradingview-widget-container');
+        const fullscreenBtn = document.getElementById('fullscreen-btn');
+        const iframeContainer = document.getElementById('tradingview-iframe-container');
         const chartLoader = document.getElementById('chart-loader');
         const chartError = document.getElementById('chart-error');
 
-        let currentWidget = null;
         let cryptoDataMap = new Map();
         let webSocket = null;
-        let tradingViewReady = false; // Flag para saber si TradingView está listo
 
         // --- Funciones de Formato ---
         function formatCurrency(number) { /* ... */
@@ -119,6 +125,8 @@
              chartModal.classList.remove('opacity-0', 'pointer-events-none');
              chartModal.querySelector('.modal-content').classList.remove('scale-95');
              document.body.classList.add('modal-active');
+             chartModal.classList.remove('fullscreen');
+             updateFullscreenButton(false);
         }
         function closeModal() { /* ... */
             chartModal.classList.add('opacity-0');
@@ -126,105 +134,64 @@
             setTimeout(() => {
                 chartModal.classList.add('pointer-events-none');
                 document.body.classList.remove('modal-active');
-                if (widgetContainer) { widgetContainer.innerHTML = ''; }
-                currentWidget = null;
+                if (iframeContainer) { iframeContainer.innerHTML = ''; }
                 chartLoader.style.display = 'none';
                 chartError.style.display = 'none';
                 chartError.textContent = '';
+                chartModal.classList.remove('fullscreen');
             }, 250);
         }
+        function toggleFullscreen() { /* ... */
+            const isFullscreen = chartModal.classList.toggle('fullscreen');
+            updateFullscreenButton(isFullscreen);
+        }
+        function updateFullscreenButton(isFullscreen) { /* ... */
+            if (isFullscreen) {
+                fullscreenBtn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-minimize"><path d="M8 3v3a2 2 0 0 1-2 2H3"/><path d="M21 8h-3a2 2 0 0 1-2-2V3"/><path d="M3 16h3a2 2 0 0 1 2 2v3"/><path d="M16 21v-3a2 2 0 0 1 2-2h3"/></svg>`;
+                fullscreenBtn.setAttribute('title', 'Restaurar tamaño');
+            } else {
+                fullscreenBtn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-maximize"><path d="M8 3H5a2 2 0 0 0-2 2v3"/><path d="M21 8V5a2 2 0 0 0-2-2h-3"/><path d="M3 16v3a2 2 0 0 0 2 2h3"/><path d="M16 21h3a2 2 0 0 0 2-2v-3"/></svg>`;
+                fullscreenBtn.setAttribute('title', 'Pantalla completa');
+            }
+        }
 
-        // --- Función para mostrar Widget de TradingView ---
-        function displayChart(symbol) {
-            console.log(`Attempting to display TradingView Widget for ${symbol}`);
+        // --- Función para mostrar Gráfico con Iframe ---
+        function displayChart(symbol) { /* ... (sin cambios) ... */
+            console.log(`Displaying TradingView Iframe for ${symbol}`);
             chartModalTitle.textContent = `Gráfico de ${symbol.replace('USDT', '')}/USDT`;
             chartLoader.style.display = 'flex';
             chartError.style.display = 'none';
             chartError.textContent = '';
-            let widgetReady = false;
-            let loadingTimeoutId = null;
-
-            // Limpiar contenedor
-            if (widgetContainer) {
-                widgetContainer.innerHTML = '';
-            } else {
-                 console.error("Widget container not found!");
-                 chartError.textContent = 'Error interno: No se encontró el contenedor del gráfico.';
-                 chartError.style.display = 'flex';
-                 openModal();
-                 return;
-            }
-
-            openModal(); // Abrir el modal
-
-            // Timeout de 30 segundos (se mantiene)
-            loadingTimeoutId = setTimeout(() => {
-                if (!widgetReady) {
-                    console.error(`TradingView Widget for ${symbol} did not load within 30 seconds.`);
-                    chartLoader.style.display = 'none';
-                    chartError.textContent = `El gráfico para ${symbol} tardó demasiado en cargar o falló. Verifica tu conexión o inténtalo más tarde.`;
-                    chartError.style.display = 'flex';
-                    if (widgetContainer) widgetContainer.innerHTML = '';
-                    currentWidget = null;
-                }
-            }, 30000);
-
+            if (iframeContainer) { iframeContainer.innerHTML = ''; }
+            else { /* ... manejo error contenedor ... */ return; }
+            openModal();
             try {
-                 // Verificar TradingView (usar flag global)
-                 if (!tradingViewReady || typeof TradingView === 'undefined' || typeof TradingView.widget !== 'function') {
-                     clearTimeout(loadingTimeoutId);
-                     throw new Error('La funcionalidad de TradingView Widget no está disponible o no se ha inicializado correctamente.');
-                 }
-                 console.log("TradingView Widget function is available.");
-
-                 // Verificar dimensiones del contenedor
-                 if (!widgetContainer || widgetContainer.clientHeight === 0 || widgetContainer.clientWidth === 0) {
-                     clearTimeout(loadingTimeoutId);
-                     console.error('Widget container has zero dimensions just before widget creation.');
-                     // Intentar forzar un reflow puede ayudar a veces, aunque no es ideal
-                     // await new Promise(resolve => requestAnimationFrame(resolve));
-                     // if (widgetContainer.clientHeight === 0 || widgetContainer.clientWidth === 0) {
-                         throw new Error('El contenedor del gráfico no tiene dimensiones válidas.');
-                     // }
-                 }
-                 console.log(`Widget container dimensions before creation: ${widgetContainer.clientWidth}x${widgetContainer.clientHeight}`);
-
-                 console.log("Creating widget...");
-                 // Crear el widget (configuración simplificada)
-                 currentWidget = new TradingView.widget({
-                     "width": "100%",
-                     "height": "100%",
-                     "symbol": `BINANCE:${symbol}`,
-                     "interval": "D",
-                     "timezone": "Etc/UTC",
-                     "theme": "light",
-                     "style": "3", // Gráfico de línea
-                     "locale": "es",
-                     "enable_publishing": false,
-                     "hide_side_toolbar": true, // Ocultar herramientas de dibujo
-                     "allow_symbol_change": false,
-                     "container_id": "tradingview-widget-container",
-                      "onReady": function() {
-                         widgetReady = true;
-                         clearTimeout(loadingTimeoutId); // Cancelar timeout al cargar
-                         console.log(`TradingView Widget for ${symbol} is ready (onReady fired).`);
-                         if (chartError.style.display === 'none') {
-                             chartLoader.style.display = 'none'; // Ocultar loader
-                         } else {
-                             console.warn("onReady fired, but timeout error was already displayed.");
-                         }
-                     }
-                 });
-                 console.log("TradingView widget instance created (async loading).");
-
-            } catch (error) {
-                 clearTimeout(loadingTimeoutId);
-                 console.error(`Error creating TradingView Widget for ${symbol}:`, error);
+                const encodedSymbol = encodeURIComponent(`BINANCE:${symbol}`);
+                const iframeSrc = `https://s.tradingview.com/widgetembed/?frameborder=0&symbol=${encodedSymbol}&interval=D&theme=light&style=3&locale=es&hide_side_toolbar=1&autosize=1`;
+                console.log("Creating iframe with src:", iframeSrc);
+                const iframe = document.createElement('iframe');
+                iframe.setAttribute('src', iframeSrc);
+                iframe.setAttribute('style', 'width: 100%; height: 100%; border: 0;');
+                iframe.setAttribute('frameborder', '0');
+                iframe.setAttribute('allowtransparency', 'true');
+                iframe.setAttribute('scrolling', 'no');
+                iframe.onload = () => {
+                    console.log(`Iframe for ${symbol} loaded (structure).`);
+                    setTimeout(() => { if (chartError.style.display === 'none') { chartLoader.style.display = 'none'; } }, 500);
+                };
+                iframe.onerror = () => { /* ... manejo error iframe ... */
+                     console.error(`Failed to load iframe for ${symbol}`);
+                     chartLoader.style.display = 'none';
+                     chartError.textContent = `Error al cargar el marco del gráfico para ${symbol}.`;
+                     chartError.style.display = 'flex';
+                };
+                iframeContainer.appendChild(iframe);
+            } catch (error) { /* ... manejo error creación iframe ... */
+                 console.error(`Error creating iframe for ${symbol}:`, error);
                  chartLoader.style.display = 'none';
-                 chartError.textContent = `Error al crear el gráfico para ${symbol}: ${error.message || 'Error desconocido'}`;
+                 chartError.textContent = `Error al preparar el gráfico para ${symbol}: ${error.message || 'Error desconocido'}`;
                  chartError.style.display = 'flex';
-                 if (widgetContainer) widgetContainer.innerHTML = '';
-                 currentWidget = null;
+                 if (iframeContainer) iframeContainer.innerHTML = '';
             }
         }
 
@@ -255,7 +222,7 @@
         }
 
         // --- Función para Conectar WebSocket ---
-        function connectWebSocket() { /* ... */
+        function connectWebSocket() { /* ... (sin cambios) ... */
             const streams = mainCryptos.map(s => `${s.toLowerCase()}@ticker`).join('/');
             const wsUrl = `${websocketUrl}/${streams}`;
             console.log(`Connecting to WebSocket: ${wsUrl}`);
@@ -287,20 +254,34 @@
         }
 
         // --- Función INICIAL para Cargar Datos y Construir Tabla ---
-        async function fetchInitialDataAndBuildTable() { /* ... */
+        async function fetchInitialDataAndBuildTable() {
               loadingIndicator.style.display = 'block';
               errorMessage.style.display = 'none';
              try {
                  console.log("Fetching initial data from:", tickerApiUrl);
                  const response = await fetch(tickerApiUrl);
-                 console.log("Initial data response status:", response.status);
+                 console.log("Initial data response status:", response.status, response.statusText); // Log status text
                  if (!response.ok) {
-                     let errorText = response.statusText;
-                     try { const errorBody = await response.text(); console.error("Error body from API:", errorBody); errorText = `${response.status} ${response.statusText} - ${errorBody.substring(0, 100)}`; } catch(e) { /* Ignorar */ }
+                     let errorText = `${response.status} ${response.statusText}`;
+                     try {
+                         // Intenta leer el cuerpo como texto para obtener más detalles
+                         const errorBody = await response.text();
+                         console.error("Error body from API (if any):", errorBody);
+                         // Añade parte del cuerpo al mensaje si no está vacío
+                         if (errorBody) {
+                            errorText += ` - ${errorBody.substring(0, 150)}`; // Limitar longitud
+                         }
+                     } catch(e) {
+                         console.warn("Could not read error response body.");
+                     }
+                     // Crear un error con el texto detallado
                      throw new Error(`HTTP error! ${errorText}`);
                  }
                  const data = await response.json();
+                 console.log("Initial data received, processing...");
                  const filteredData = data.filter(ticker => mainCryptos.includes(ticker.symbol));
+
+                 // --- Construcción de la tabla (sin cambios) ---
                  let table = cryptoTableContainer.querySelector('table');
                  if (!table) {
                      table = document.createElement('table');
@@ -341,42 +322,50 @@
                      cellVolume.innerHTML = formatCurrency(crypto.quoteVolume);
                      cryptoDataMap.set(crypto.symbol, { rowElement: row, priceCell: cellPrice, changeCell: cellChange, volumeCell: cellVolume, lastPrice: parseFloat(crypto.lastPrice) || 0, priceChangePercent: parseFloat(crypto.priceChangePercent) || 0 });
                  });
+                 // --- Fin construcción tabla ---
+
                   loadingIndicator.style.display = 'none';
                   if (!webSocket || webSocket.readyState === WebSocket.CLOSED) { connectWebSocket(); }
+
              } catch (error) {
-                 console.error('Error fetching initial crypto data:', error);
+                 // *** CAMBIO: Logging y mensaje de error mejorados ***
+                 console.error('fetchInitialDataAndBuildTable caught an error:');
+                 // Loguear diferentes representaciones del error
+                 console.log("Raw error object:", error);
+                 console.dir(error);
+                 if (error instanceof Error) {
+                     console.error("Error Name:", error.name);
+                     console.error("Error Message:", error.message);
+                     console.error("Error Stack:", error.stack);
+                 } else {
+                     console.error("Caught item is not an Error instance:", typeof error);
+                 }
+                 try {
+                     const errorString = JSON.stringify(error);
+                     console.error("Stringified error:", errorString);
+                 } catch (e) {
+                      console.warn("Could not stringify the error object.");
+                 }
+
                  loadingIndicator.style.display = 'none';
-                 errorMessage.innerHTML = `<p class="font-medium">¡Error al Cargar Datos!</p><p>${error.message || 'Ocurrió un error desconocido.'}</p>`;
+                 // Mensaje más genérico pero que guía al usuario
+                 errorMessage.innerHTML = `<p class="font-medium">¡Error al Cargar Datos Iniciales!</p>
+                                          <p>No se pudo obtener la información de la API.</p>
+                                          <p class="text-xs mt-1">Posibles causas: Problema de red, API de Binance no disponible o bloqueo (CORS).</p>
+                                          <p class="text-xs mt-1">Revisa la consola del navegador (F12) y la pestaña 'Network' para más detalles técnicos.</p>`;
                  errorMessage.style.display = 'block';
              }
         }
 
         // --- Inicialización Principal ---
-        // *** CAMBIO: Esperar a window.onload ***
-        window.onload = () => {
-            console.log("Window fully loaded (including scripts like tv.js).");
-
-            // Verificar TradingView DESPUÉS de window.onload
-             if (typeof TradingView !== 'undefined' && typeof TradingView.widget === 'function') {
-                 console.log('TradingView object is available after window.onload.');
-                 tradingViewReady = true; // Marcar como listo para usar
-             } else {
-                 console.error('TradingView object is NOT available even after window.onload. Check script tag and network.');
-                 // Podrías mostrar un error persistente aquí si es crítico
-                 errorMessage.innerHTML = `<p class="font-medium">¡Error Crítico!</p><p>No se pudo cargar la biblioteca de gráficos (TradingView). Los gráficos no funcionarán.</p>`;
-                 errorMessage.style.display = 'block';
-             }
-
-            // Ejecutar la carga de datos y configuración de listeners
+        document.addEventListener('DOMContentLoaded', () => {
+            console.log("DOM fully loaded and parsed.");
             fetchInitialDataAndBuildTable();
+            fullscreenBtn.addEventListener('click', toggleFullscreen);
             closeModalBtn.addEventListener('click', closeModal);
             chartModal.addEventListener('click', (event) => { if (event.target === chartModal) { closeModal(); } });
             document.addEventListener('keydown', (event) => { if (event.key === 'Escape' && !chartModal.classList.contains('pointer-events-none')) { closeModal(); } });
-        };
-
-        // Limpiar el listener de DOMContentLoaded anterior si existía
-        // (No es estrictamente necesario si se reemplaza, pero es buena práctica)
-        // document.removeEventListener('DOMContentLoaded', ...) // Si hubiéramos nombrado la función
+        });
 
     </script>
 
