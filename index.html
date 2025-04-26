@@ -1,46 +1,29 @@
 <!DOCTYPE html>
-<html lang="es" class="dark"> {/* Forzar modo oscuro por defecto */}
+<html lang="es" class="dark">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Crypto Tracker - Binance (Top 15)</title>
+    <title>Crypto Tracker - Binance (Ordenamiento Interactivo)</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
         /* Fuente Inter */
         body { font-family: 'Inter', sans-serif; }
 
-        /* Colores personalizados inspirados en la imagen */
+        /* Colores personalizados */
         :root {
-            --bg-dark: #1e2329; /* Fondo principal oscuro */
-            --card-dark: #2b3139; /* Fondo tarjeta */
-            --text-primary-dark: #e5e7eb; /* Texto principal (blanco/gris claro) */
-            --text-secondary-dark: #9ca3af; /* Texto secundario (gris) */
-            --positive-bg: #16c784; /* Fondo verde % */
-            --negative-bg: #ea3943; /* Fondo rojo % */
-            --positive-text: #ffffff; /* Texto blanco en % */
-            --negative-text: #ffffff; /* Texto blanco en % */
-            --border-dark: #4b5563; /* Borde sutil */
+            --bg-dark: #1e2329; --card-dark: #2b3139; --text-primary-dark: #e5e7eb;
+            --text-secondary-dark: #9ca3af; --positive-bg: #16c784; --negative-bg: #ea3943;
+            --positive-text: #ffffff; --negative-text: #ffffff; --border-dark: #4b5563;
+            --button-active-bg: #4f46e5; /* Indigo-600 */
+            --button-inactive-bg: #4b5563; /* Gris oscuro */
+            --button-hover-bg: #6366f1; /* Indigo-500 */
         }
 
-        /* Aplicar colores base en modo oscuro */
-        body.dark {
-            background-color: var(--bg-dark);
-            color: var(--text-primary-dark);
-        }
-        .dark #crypto-container {
-            background-color: var(--card-dark);
-             border-color: var(--border-dark);
-        }
-         .dark .crypto-card {
-            background-color: var(--card-dark);
-            border-color: var(--border-dark);
-         }
-         .dark .crypto-card:hover {
-             background-color: #374151;
-             box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.2), 0 2px 4px -1px rgba(0, 0, 0, 0.12);
-         }
-
-        /* Loader oscuro */
+        /* Estilos base oscuros */
+        body.dark { background-color: var(--bg-dark); color: var(--text-primary-dark); }
+        .dark #crypto-container { background-color: transparent; border: none; box-shadow: none; }
+        .dark .crypto-card { background-color: var(--card-dark); border-color: var(--border-dark); }
+        .dark .crypto-card:hover { background-color: #374151; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.2), 0 2px 4px -1px rgba(0, 0, 0, 0.12); }
         .dark .loader { border-color: var(--border-dark); border-top-color: #60a5fa; }
         @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
 
@@ -54,11 +37,8 @@
         .dark #close-modal-btn:hover, .dark #fullscreen-btn:hover { background-color: var(--border-dark); color: var(--text-primary-dark); }
         .dark .modal-content { border-bottom-color: var(--border-dark); }
 
-        /* Estilos para el cambio porcentual */
-        .change-badge {
-            display: inline-block; padding: 2px 8px; border-radius: 4px;
-            font-weight: 600; font-size: 0.875rem; text-align: center; min-width: 70px;
-        }
+        /* Badge de cambio % */
+        .change-badge { display: inline-block; padding: 2px 8px; border-radius: 4px; font-weight: 600; font-size: 0.875rem; text-align: center; min-width: 70px; }
         .change-badge.positive { background-color: var(--positive-bg); color: var(--positive-text); }
         .change-badge.negative { background-color: var(--negative-bg); color: var(--negative-text); }
         .change-badge.neutral { background-color: var(--border-dark); color: var(--text-secondary-dark); }
@@ -77,7 +57,35 @@
         .modal.fullscreen .modal-content { width: 90vw; max-width: 1600px; }
         .crypto-card { transition: transform 0.2s ease-in-out, box-shadow 0.2s ease-in-out; }
         .crypto-card:hover { transform: translateY(-4px); }
-        .dark .crypto-card:hover { box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.2), 0 2px 4px -1px rgba(0, 0, 0, 0.12); } /* Sombra más sutil */
+        .dark .crypto-card:hover { box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.2), 0 2px 4px -1px rgba(0, 0, 0, 0.12); }
+        .loader { border: 4px solid #f3f3f3; border-top: 4px solid #3b82f6; border-radius: 50%; width: 40px; height: 40px; animation: spin 1s linear infinite; margin: 20px auto; }
+
+        /* Estilos botones de ordenamiento */
+        .sort-button {
+            background-color: var(--button-inactive-bg);
+            color: var(--text-primary-dark);
+            transition: background-color 0.2s ease;
+            display: inline-flex;
+            align-items: center;
+            gap: 0.25rem;
+        }
+        .sort-button:hover {
+            background-color: var(--button-hover-bg);
+        }
+        .sort-button.active {
+            background-color: var(--button-active-bg);
+            color: white;
+            font-weight: 600;
+        }
+        .sort-indicator {
+            width: 1em;
+            height: 1em;
+            display: none;
+            stroke-width: 3;
+        }
+        .sort-button.active .sort-indicator {
+            display: inline-block;
+        }
 
     </style>
      <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -88,30 +96,40 @@
 <body class="dark">
 
     <div class="container mx-auto p-4 sm:p-6 md:p-8 max-w-7xl">
-        <header class="mb-10 text-center">
-             <h1 class="text-4xl md:text-5xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-blue-600 to-indigo-700 pb-2">
-                Monitor de Criptomonedas (Top 15)
-            </h1>
-            <p class="text-gray-400 mt-2 text-lg">Precios en tiempo real desde Binance (USDT)</p>
-        </header>
 
-        <div id="crypto-container" class="bg-gray-800/50 rounded-xl shadow-lg overflow-hidden border border-gray-700">
-            <div class="p-5 md:p-8">
+        <div id="crypto-container" class="rounded-xl">
+            <div class="p-0">
                 <div id="loading" class="text-center py-10">
                     <div class="loader"></div>
                     <p class="text-gray-400 mt-3">Cargando datos iniciales...</p>
                 </div>
-                <div id="error-message" class="hidden text-center text-red-400 bg-red-900/30 p-4 rounded-lg border border-red-700">
-                    </div>
+                <div id="error-message" class="hidden text-center text-red-400 bg-red-900/30 p-4 rounded-lg border border-red-700 mb-6">
+                </div>
+
+                <div id="sort-controls" class="mb-6 flex justify-center space-x-3 sm:space-x-4">
+                    <button data-sort="name" class="sort-button px-3 py-2 sm:px-4 sm:py-2 rounded-md text-sm">
+                        <span>Nombre</span>
+                        <svg class="sort-indicator sort-asc hidden" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="m18 15-6-6-6 6"/></svg>
+                        <svg class="sort-indicator sort-desc hidden" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="m6 9 6 6 6-6"/></svg>
+                    </button>
+                    <button data-sort="volume" class="sort-button px-3 py-2 sm:px-4 sm:py-2 rounded-md text-sm">
+                        <span>Volumen</span>
+                         <svg class="sort-indicator sort-asc hidden" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="m18 15-6-6-6 6"/></svg>
+                        <svg class="sort-indicator sort-desc hidden" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="m6 9 6 6 6-6"/></svg>
+                    </button>
+                    <button data-sort="change" class="sort-button active px-3 py-2 sm:px-4 sm:py-2 rounded-md text-sm">
+                        <span>% Cambio 24h</span>
+                         <svg class="sort-indicator sort-asc hidden" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="m18 15-6-6-6 6"/></svg>
+                        <svg class="sort-indicator sort-desc" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="m6 9 6 6 6-6"/></svg>
+                    </button>
+                </div>
+
                 <div id="crypto-grid-container" class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4 md:gap-6">
-                     </div>
+                     {/* Las tarjetas se insertan aquí */}
+                </div>
             </div>
         </div>
 
-        <footer class="mt-10 text-center text-gray-400 text-sm">
-            Datos proporcionados por la API pública y WebSocket de Binance. Gráficos por TradingView.
-            <p>Listo para desplegar en Firebase Hosting.</p>
-        </footer>
     </div>
 
     <div id="chart-modal" class="modal pointer-events-none fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-80 opacity-0">
@@ -130,7 +148,9 @@
                     <div class="loader"></div>
                  </div>
                  <div id="chart-error" class="absolute inset-0 flex items-center justify-center bg-gray-900 z-10 hidden text-red-400 p-4 text-center"></div>
-                 <div id="tradingview-iframe-container" class="w-full h-full"></div>
+                 <div id="tradingview-iframe-container" class="w-full h-full">
+                     {/* Iframe se inserta aquí */}
+                 </div>
             </div>
         </div>
     </div>
@@ -140,24 +160,31 @@
         const tickerApiUrl = 'https://api.binance.com/api/v3/ticker/24hr';
         const websocketUrl = 'wss://stream.binance.com:9443/ws';
 
-        // *** CAMBIO: Lista actualizada al Top 15 (aproximado) ***
+        // Símbolos Top 15
         const mainCryptos = [
             'BTCUSDT', 'ETHUSDT', 'BNBUSDT', 'SOLUSDT', 'XRPUSDT', 'ADAUSDT',
             'DOGEUSDT', 'SHIBUSDT', 'AVAXUSDT', 'DOTUSDT', 'LINKUSDT', 'TONUSDT',
-            'TRXUSDT', 'MATICUSDT', 'LTCUSDT'
+            'TRXUSDT', 'TRUMPUSDT', 'LTCUSDT','WLDUSDT'
         ];
 
         // Elementos del DOM
         let cryptoGridContainer, loadingIndicator, errorMessage, chartModal, chartModalTitle,
-            closeModalBtn, fullscreenBtn, iframeContainer, chartLoader, chartError;
+            closeModalBtn, fullscreenBtn, iframeContainer, chartLoader, chartError,
+            sortButtons;
 
         let cryptoDataMap = new Map();
         let webSocket = null;
+        let sortTimer = null;
+        let currentSortCriteria = 'change';
+        let currentSortDirection = 'desc';
 
         // --- Funciones de Formato ---
-        function formatCurrency(number) {
+        function formatCurrency(number, symbol = null) {
             const num = parseFloat(number);
             if (isNaN(num)) { return '<span class="text-gray-500">N/A</span>'; }
+            if (symbol === 'SHIBUSDT') {
+                 return num.toLocaleString('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 8, maximumFractionDigits: 8 });
+            }
             if (num > 1_000_000_000) { return `$${(num / 1_000_000_000).toFixed(2)}B`; }
             if (num > 1_000_000) { return `$${(num / 1_000_000).toFixed(2)}M`; }
             return num.toLocaleString('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: num > 1 ? 2 : (num > 0.0001 ? 4 : 6), maximumFractionDigits: num > 1 ? 4 : 6 });
@@ -216,9 +243,9 @@
             else { console.error("Iframe container not found!"); chartLoader.style.display = 'none'; chartError.textContent = 'Error interno: No se encontró el contenedor del gráfico.'; chartError.style.display = 'flex'; openModal(); return; }
             openModal();
             try {
-                const tradingViewSymbol = `BINANCE:${symbol}`; // Asumir Binance
+                const tradingViewSymbol = `BINANCE:${symbol}`;
                 const encodedSymbol = encodeURIComponent(tradingViewSymbol);
-                const currentTheme = 'dark'; // Forzar tema oscuro para gráfico
+                const currentTheme = 'dark';
                 const iframeSrc = `https://s.tradingview.com/widgetembed/?frameborder=0&symbol=${encodedSymbol}&interval=D&theme=${currentTheme}&style=3&locale=es&hide_side_toolbar=1&autosize=1`;
                 console.log("Creating iframe with src:", iframeSrc);
                 const iframe = document.createElement('iframe');
@@ -248,7 +275,7 @@
             }
         }
 
-        // --- Funciones de Actualización de Tarjetas (WebSocket) ---
+        // --- Funciones de Actualización y Ordenamiento ---
         function updateCardElement(element, newValue, isPriceChange = false, priceGoesUp = false) {
             if (element) {
                 element.innerHTML = newValue;
@@ -270,10 +297,55 @@
                  else { badgeElement.classList.add('negative'); }
              }
         }
+        function sortAndReorderCards() {
+            if (!cryptoGridContainer) return;
+            const cards = Array.from(cryptoGridContainer.querySelectorAll('.crypto-card'));
+            cards.sort((cardA, cardB) => {
+                const symbolA = cardA.dataset.symbol;
+                const symbolB = cardB.dataset.symbol;
+                const dataA = cryptoDataMap.get(symbolA);
+                const dataB = cryptoDataMap.get(symbolB);
+                if (!dataA) return 1; if (!dataB) return -1;
+                let valueA, valueB;
+                switch (currentSortCriteria) {
+                    case 'name':
+                        valueA = symbolA; valueB = symbolB;
+                        if (currentSortDirection === 'asc') {
+                            if (valueA < valueB) return -1; if (valueA > valueB) return 1; return 0;
+                        } else {
+                            if (valueA < valueB) return 1; if (valueA > valueB) return -1; return 0;
+                        }
+                    case 'volume':
+                        valueA = dataA.volume || 0; valueB = dataB.volume || 0;
+                        return currentSortDirection === 'desc' ? valueB - valueA : valueA - valueB;
+                    case 'change': default:
+                        valueA = dataA.priceChangePercent || (currentSortDirection === 'desc' ? -Infinity : Infinity);
+                        valueB = dataB.priceChangePercent || (currentSortDirection === 'desc' ? -Infinity : Infinity);
+                        return currentSortDirection === 'desc' ? valueB - valueA : valueA - valueB;
+                }
+            });
+            cards.forEach(card => cryptoGridContainer.appendChild(card));
+        }
+        function updateSortButtons() {
+            sortButtons.forEach(button => {
+                const sortType = button.dataset.sort;
+                const ascIndicator = button.querySelector('.sort-asc');
+                const descIndicator = button.querySelector('.sort-desc');
+                if (sortType === currentSortCriteria) {
+                    button.classList.add('active');
+                    if (ascIndicator) ascIndicator.style.display = currentSortDirection === 'asc' ? 'inline-block' : 'none';
+                    if (descIndicator) descIndicator.style.display = currentSortDirection === 'desc' ? 'inline-block' : 'none';
+                } else {
+                    button.classList.remove('active');
+                    if (ascIndicator) ascIndicator.style.display = 'none';
+                    if (descIndicator) descIndicator.style.display = 'none';
+                }
+            });
+        }
 
         // --- Función para Conectar WebSocket ---
         function connectWebSocket() {
-            const streams = mainCryptos.map(s => `${s.toLowerCase()}@ticker`).join('/'); // Usa la nueva lista
+            const streams = mainCryptos.map(s => `${s.toLowerCase()}@ticker`).join('/');
             const wsUrl = `${websocketUrl}/${streams}`;
             console.log(`Connecting to WebSocket: ${wsUrl}`);
             if (webSocket && webSocket.readyState === WebSocket.OPEN) { return; }
@@ -287,14 +359,19 @@
                         const cardData = cryptoDataMap.get(symbol);
                         if (cardData) {
                             const currentPrice = parseFloat(message.c);
+                            const currentPercent = parseFloat(message.P);
+                            const currentVolume = parseFloat(message.q);
                             const oldPrice = cardData.lastPrice;
                             const priceGoesUp = currentPrice >= oldPrice;
                             if (isNaN(currentPrice)) { console.warn(`[Warning ${symbol}] Invalid price received:`, message.c); return; }
                             cardData.lastPrice = currentPrice;
-                            cardData.priceChangePercent = parseFloat(message.P);
-                            updateCardElement(cardData.priceElement, formatCurrency(currentPrice), true, priceGoesUp);
-                            updateChangeBadge(cardData.changeElement, message.P); // Usar badge
-                            updateCardElement(cardData.volumeElement, `Vol (24h): ${formatCurrency(message.q)}`);
+                            cardData.priceChangePercent = currentPercent;
+                            cardData.volume = currentVolume;
+                            updateCardElement(cardData.priceElement, formatCurrency(currentPrice, symbol), true, priceGoesUp);
+                            updateChangeBadge(cardData.changeElement, currentPercent);
+                            updateCardElement(cardData.volumeElement, `Vol (24h): ${formatCurrency(currentVolume)}`);
+                            clearTimeout(sortTimer);
+                            sortTimer = setTimeout(sortAndReorderCards, 750);
                         }
                     }
                 } catch (parseError) { console.error("Error parsing WebSocket message:", parseError, event.data); }
@@ -317,67 +394,61 @@
                      throw new Error(`HTTP error! ${errorText}`);
                  }
                  const data = await response.json();
-                 const filteredData = data.filter(ticker => mainCryptos.includes(ticker.symbol)); // Filtrar por la nueva lista
+                 const filteredData = data.filter(ticker => mainCryptos.includes(ticker.symbol));
 
                  cryptoGridContainer.innerHTML = '';
                  cryptoDataMap.clear();
-                 // Ordenar según la lista mainCryptos para mantener un orden consistente
-                 filteredData.sort((a, b) => mainCryptos.indexOf(a.symbol) - mainCryptos.indexOf(b.symbol));
 
-                 // Crear tarjetas para datos recibidos
+                 // Guardar datos iniciales en el mapa
                  filteredData.forEach(crypto => {
-                     const card = document.createElement('div');
-                     card.className = 'crypto-card border rounded-lg p-4 shadow-sm hover:shadow-md cursor-pointer flex flex-col space-y-1';
-                     card.dataset.symbol = crypto.symbol;
-                     card.addEventListener('click', () => { displayChart(crypto.symbol); });
-                     const symbolElement = document.createElement('div');
-                     symbolElement.className = 'text-base font-semibold';
-                     symbolElement.textContent = crypto.symbol.replace('USDT', '');
-                     const priceElement = document.createElement('div');
-                     priceElement.className = 'text-lg font-bold crypto-card-price';
-                     priceElement.innerHTML = formatCurrency(crypto.lastPrice);
-                     const changeBadgeElement = document.createElement('div');
-                     changeBadgeElement.className = 'change-badge crypto-card-change self-start';
-                     updateChangeBadge(changeBadgeElement, crypto.priceChangePercent);
-                     const volumeElement = document.createElement('div');
-                     volumeElement.className = 'text-xs text-gray-500 dark:text-gray-400 crypto-card-volume pt-1';
-                     volumeElement.innerHTML = `Vol (24h): ${formatCurrency(crypto.quoteVolume)}`;
-                     card.appendChild(symbolElement);
-                     card.appendChild(priceElement);
-                     card.appendChild(changeBadgeElement);
-                     card.appendChild(volumeElement);
-                     cryptoGridContainer.appendChild(card);
-                     cryptoDataMap.set(crypto.symbol, { cardElement: card, priceElement: priceElement, changeElement: changeBadgeElement, volumeElement: volumeElement, lastPrice: parseFloat(crypto.lastPrice) || 0, priceChangePercent: parseFloat(crypto.priceChangePercent) || 0 });
+                     cryptoDataMap.set(crypto.symbol, {
+                         priceElement: null, changeElement: null, volumeElement: null,
+                         lastPrice: parseFloat(crypto.lastPrice) || 0,
+                         priceChangePercent: parseFloat(crypto.priceChangePercent) || 0,
+                         volume: parseFloat(crypto.quoteVolume) || 0
+                     });
                  });
 
-                 // Crear placeholders para las criptos de mainCryptos que NO vinieron en la respuesta inicial
+                 // Crear tarjetas (placeholders y reales)
                  mainCryptos.forEach(symbol => {
-                    if (!cryptoDataMap.has(symbol)) {
-                        console.warn(`Symbol ${symbol} not found in initial API response. Creating placeholder card.`);
-                        const card = document.createElement('div');
-                        card.className = 'crypto-card border rounded-lg p-4 shadow-sm flex flex-col space-y-1 opacity-70';
-                        card.dataset.symbol = symbol;
-                        card.addEventListener('click', () => { displayChart(symbol); });
-                        const symbolElement = document.createElement('div');
-                        symbolElement.className = 'text-base font-semibold';
-                        symbolElement.textContent = symbol.replace('USDT', '');
-                        const priceElement = document.createElement('div');
-                        priceElement.className = 'text-lg font-bold text-gray-400 dark:text-gray-500 crypto-card-price';
-                        priceElement.innerHTML = '---';
-                        const changeBadgeElement = document.createElement('div');
-                        changeBadgeElement.className = 'change-badge neutral crypto-card-change self-start';
-                        changeBadgeElement.textContent = '---';
-                        const volumeElement = document.createElement('div');
-                        volumeElement.className = 'text-xs text-gray-400 dark:text-gray-500 crypto-card-volume pt-1';
-                        volumeElement.innerHTML = `Vol (24h): ---`;
-                        card.appendChild(symbolElement);
-                        card.appendChild(priceElement);
-                        card.appendChild(changeBadgeElement);
-                        card.appendChild(volumeElement);
-                        cryptoGridContainer.appendChild(card);
-                        cryptoDataMap.set(symbol, { cardElement: card, priceElement: priceElement, changeElement: changeBadgeElement, volumeElement: volumeElement, lastPrice: 0, priceChangePercent: 0 });
+                    const crypto = cryptoDataMap.get(symbol);
+                    const card = document.createElement('div');
+                    card.className = `crypto-card border rounded-lg p-4 shadow-sm hover:shadow-md cursor-pointer flex flex-col space-y-1 ${!crypto ? 'opacity-70' : ''}`;
+                    card.dataset.symbol = symbol;
+                    card.addEventListener('click', () => { displayChart(symbol); });
+                    const symbolElement = document.createElement('div');
+                    symbolElement.className = 'text-base font-semibold';
+                    symbolElement.textContent = symbol.replace('USDT', '');
+                    const priceElement = document.createElement('div');
+                    priceElement.className = `text-lg font-bold crypto-card-price ${!crypto ? 'text-gray-400 dark:text-gray-500' : ''}`;
+                    priceElement.innerHTML = crypto ? formatCurrency(crypto.lastPrice, symbol) : '---';
+                    const changeBadgeElement = document.createElement('div');
+                    changeBadgeElement.className = `change-badge crypto-card-change self-start ${!crypto ? 'neutral' : ''}`;
+                    if (crypto) { updateChangeBadge(changeBadgeElement, crypto.priceChangePercent); }
+                    else { changeBadgeElement.textContent = '---'; }
+                    const volumeElement = document.createElement('div');
+                    volumeElement.className = `text-xs text-gray-500 dark:text-gray-400 crypto-card-volume pt-1 ${!crypto ? 'text-gray-400 dark:text-gray-500' : ''}`;
+                    volumeElement.innerHTML = `Vol (24h): ${crypto ? formatCurrency(crypto.volume) : '---'}`;
+                    card.appendChild(symbolElement);
+                    card.appendChild(priceElement);
+                    card.appendChild(changeBadgeElement);
+                    card.appendChild(volumeElement);
+                    cryptoGridContainer.appendChild(card);
+                    // Actualizar/crear referencias en el mapa
+                    if (crypto) {
+                        crypto.cardElement = card; crypto.priceElement = priceElement;
+                        crypto.changeElement = changeBadgeElement; crypto.volumeElement = volumeElement;
+                    } else {
+                         cryptoDataMap.set(symbol, {
+                            cardElement: card, priceElement: priceElement, changeElement: changeBadgeElement, volumeElement: volumeElement,
+                            lastPrice: 0, priceChangePercent: -Infinity, volume: 0
+                        });
                     }
                  });
+
+                 // Ordenar inicialmente
+                 sortAndReorderCards();
+                 updateSortButtons(); // Actualizar botones
 
                   loadingIndicator.style.display = 'none';
                   if (!webSocket || webSocket.readyState === WebSocket.CLOSED) { connectWebSocket(); }
@@ -407,9 +478,9 @@
             iframeContainer = document.getElementById('tradingview-iframe-container');
             chartLoader = document.getElementById('chart-loader');
             chartError = document.getElementById('chart-error');
-            // No se necesita el botón de tema
+            sortButtons = document.querySelectorAll('#sort-controls .sort-button');
 
-            // Carga de datos y listeners del modal
+            // Carga de datos y listeners
             fetchInitialDataAndBuildGrid();
             if (fullscreenBtn) fullscreenBtn.addEventListener('click', toggleFullscreen); else console.error("Fullscreen button not found!");
             if (closeModalBtn) closeModalBtn.addEventListener('click', closeModal); else console.error("Close modal button not found!");
@@ -419,6 +490,23 @@
             } else {
                 console.error("Chart modal element not found!");
             }
+
+            // Listeners para botones de ordenamiento
+            if (sortButtons.length > 0) {
+                sortButtons.forEach(button => {
+                    button.addEventListener('click', () => {
+                        const newSortCriteria = button.dataset.sort;
+                        if (newSortCriteria === currentSortCriteria) {
+                            currentSortDirection = (currentSortDirection === 'desc' ? 'asc' : 'desc');
+                        } else {
+                            currentSortCriteria = newSortCriteria;
+                            currentSortDirection = (currentSortCriteria === 'name') ? 'asc' : 'desc';
+                        }
+                        updateSortButtons();
+                        sortAndReorderCards();
+                    });
+                });
+            } else { console.error("Sort buttons not found!"); }
         });
 
     </script>
